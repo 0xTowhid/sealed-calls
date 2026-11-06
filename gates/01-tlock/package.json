@@ -1,0 +1,8 @@
+{
+  "name": "gate-tlock",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "tlock-js": "0.9.0"
+  }
+}
