@@ -1,6 +1,8 @@
 # Sealed Calls
 
-A paid alpha club where a caller cannot delete, edit or hide a losing call. A community's Sputnik DAO funds a club once; calls are timelocked to a drand round (members read them at once, everyone else at the round); an OutLayer TEE job scores revealed calls against public prices; the contract pays callers by score.
+A club's paid memecoin calls become a complete public record after each call ends. Members read calls immediately; the public sees each call only once its horizon is over. An OutLayer TEE job scores every call on the indicative return of a $500 trade, and the caller is paid from the club's escrow (funded by its Sputnik DAO) only when that record is positive.
+
+Sealed Calls does not stop callers trading against you; it makes their record public and pays them only when calls work.
 
 Built for NEAR HACKATHON 2026 (tracks: Social Money, Privacy & Private AI, Open Innovation). Status: **day-1 gate checks**. Nothing below is the product yet.
 
@@ -38,7 +40,7 @@ PASS: three `OK` lines, `period=3s` (drand quicknet), and the ciphertext size it
 node gates/04-prices/fetch-candles.mjs
 ```
 
-PASS: Hyperliquid and both GeckoTerminal lines `OK`. Copy the Solana pool address it prints. The Robinhood line only tells us whether stock tokens make the MVP.
+PASS: for BONK or WIF, (1) SOL/USDC pools listed with `pool_created_at`, (2) 1-minute USD candles, (3) candles 72 h back via `before_timestamp`. Note what it says about empty minutes (omitted or zero-filled): the scorer depends on it. Lines 4 (free trade list) and 5 (Jupiter quote) are informational. Copy the top pool address for `run-probe.sh call-gt`.
 
 ### (b) Contract → OutLayer → callback — `gates/02-outlayer`
 
