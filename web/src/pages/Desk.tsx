@@ -355,7 +355,7 @@ function LateAccess({ ch, account }: { ch: Channel; account: string }) {
           <dt>Live signals</dt><dd>{st.live}</dd>
           <dt>Waiting</dt><dd>{st.waiting ? `${st.waiting} share${st.waiting > 1 ? "s" : ""} pending` : "every active subscriber has every live signal"}</dd>
           {st.shared.length > 0 && <><dt>Just shared</dt><dd className="gain">with {st.shared.join(", ")}</dd></>}
-          {st.cantOpen > 0 && <><dt>Can't share</dt><dd className="loss">{st.cantOpen} signal{st.cantOpen > 1 ? "s were" : " was"} posted from another browser or before late access existed. Paste that browser's creator key below.</dd></>}
+          {st.cantOpen > 0 && <><dt>Can't share</dt><dd className="sub0">{st.cantOpen} live signal{st.cantOpen > 1 ? "s were" : " was"} posted {creatorSecret(account) ? "from another browser (paste that browser's creator key below)" : "before this browser had a creator key"}. {st.cantOpen > 1 ? "They open" : "It opens"} for everyone when {st.cantOpen > 1 ? "they end" : "it ends"}; every signal you post from here can be shared.</dd></>}
         </dl>
       )}
       {st?.error && <div className="hint bad">{st.error}</div>}
