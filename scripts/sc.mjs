@@ -69,7 +69,7 @@ export async function tlockOpen(call) {
 const [cmd, ...a] = process.argv.slice(2);
 // Libraries (tlock-js) log to stdout; keep stdout for our JSON only.
 const realLog = console.log;
-console.log = (...x) => console.error(...x);
+if (cmd) console.log = (...x) => console.error(...x); // only when run as a CLI, not when imported
 const out = (x) => realLog(typeof x === "string" ? x : JSON.stringify(x));
 try {
   if (cmd === "view") out(await view(a[0], a[1], JSON.parse(a[2] ?? "{}")));
