@@ -1,0 +1,8 @@
+=== deploy  commit 712c3a03164cccbd51ed9e115b507dddb10bddd6  Sat Nov  7 18:19:05 UTC 2026
+[18:19:08] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[18:19:55] wasm sha256 4146c1a6877f1c406a6be792bd8bc2b16dba438872f6b9cbd40280acb2ca616a
+[18:19:55] code needs about 3.8 NEAR of storage
+│    Transaction ID: 3DF6LVCwpG96SRS9oCvLhyhSbQT4p7hzJfeh7fpV6SbP
+[18:20:15] config: {"owner":"to69.testnet","period_minutes":1440,"grace_min":30,"min_signals":1,"max_signals_per_day":10,"scorer_wasm_url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/b68b2809638674fee554463742479c882c8b8357/scorer.wasm","scorer_wasm_hash":"caaaadc6b0e7efb8eaada1504abcf60e7d3609a289912a4d5ce5a31d5ea1530f","outlayer":"outlayer.testnet","reference_usd":500,"liquidity_floor_usd":100000}

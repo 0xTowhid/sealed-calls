@@ -1,0 +1,65 @@
+=== e2e  commit 712c3a03164cccbd51ed9e115b507dddb10bddd6  Sat Nov  7 18:20:15 UTC 2026
+[18:20:18] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[18:20:19] 0. throwaway contract e2e071820.to69.testnet with a 20-minute period
+New account <e2e071820.to69.testnet> has been successfully created.
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[18:20:24] wasm sha256 4146c1a6877f1c406a6be792bd8bc2b16dba438872f6b9cbd40280acb2ca616a
+[18:20:34] 1. to69.testnet creates a channel: 1 day for 0.2 NEAR, 7 days for 1 NEAR
+    │    Transaction ID: 2uFTN8X6iQcvHEvirUDZvYAiaC3oAJBf6uGMTaQAqAd9
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"channel_created","data":[{"channel":0,"creator":"to69.testnet"}]}
+    Function execution return value (printed to stdout):
+[18:20:38] 2. m1.to69.testnet subscribes (1 day) and registers a key; m2.to69.testnet subscribes without a key
+    Error: 
+       0: [91mError: Account <m1.to69.testnet> does not have enough balance (0.4997934781885822 NEAR) to cover TX cost (0.5509190825834705 NEAR).[0m
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: BqyJEUaGQRWkECbXjcpM1xaNqNCm51noAVzRYZtF3syh
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:553:62:\nnot subscribed to this channel")[0m
+    Error: 
+       0: [91mError: Account <m2.to69.testnet> does not have enough balance (0.4991895601911608 NEAR) to cover TX cost (0.5509190825834705 NEAR).[0m
+[18:20:44]    subscribers: []
+[18:20:45]    held for period 0: 0  (half of 0.4 NEAR, spread over each day)
+[18:20:46] 3. seal + post a BTC long (valid 15 min) for readers []: {"market":{"venue":"hyperliquid","address":"BTC","symbol":"BTC"},"side":"long","leverage":5,"entry_low":"NaN","entry_high":"NaN","tps":["NaN","NaN"],"sl":"NaN","msg":"E2E: BTC long around NaN"}
+{"commit":"3ccd4487571c57210606693f0e021a58745568bec0527462eac82436e5cc9f45","reveal_round":33757748,"tlock_bytes":974,"wrapped":0}
+    │    Transaction ID: BixgfY57snYfAcqink5ZgJ9iF1UWWE6MVZ6vT72PXN7A
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_posted","data":[{"channel":0,"signal":0,"creator":"to69.testnet","period":0,"valid_min":15,"opens_at_ms":1794076548768,"reveal_round":33757748,"commit":"3ccd4487571c57210606693f0e021a58745568bec0527462eac82436e5cc9f45"}]}
+    Function execution return value (printed to stdout):
+ERROR: signal 0 was not wrapped to m1.to69.testnet
+[18:20:55] 4. member reads it now: 
+[18:20:56]    public tlock-open now (must fail): ERROR: It's too early to decrypt the ciphertext - decryptable at round 33757748
+[18:20:56]    early reveal (must fail):
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: DPjjkXLe3ZDdqKyjDCxjZYpuaqFZJKUtkiJ5vgeaPGcx
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:580:9:\nsignal is still valid; it opens when its validity ends")[0m
+[18:21:00] 5. after validity, anyone reveals from drand
+[18:21:01] signal 0: waiting 957s for drand
+[18:37:02] signal 0 opened from drand: {"plaintext":"{\"v\":2,\"channel\":0,\"creator\":\"to69.testnet\",\"valid_min\":15,\"market\":{\"venue\":\"hyperliquid\",\"network\":null,\"address\":\"BTC\",\"symbol\":\"BTC\"},\"side\":\"long\",\"leverage\":5,\"entry_low\":\"NaN\",\"entry_high\":\"NaN\",\"tps\":[\"NaN\",\"NaN\"],\"sl\":\"NaN\",\"msg\":\"E2E: BTC long around NaN\",\"salt\":\"1c030261e0e8a23fd5e74b6ad2e895cd\"}","matches":true}
+<anonymous_script>:1
+undefined
+^
+
+SyntaxError: "undefined" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at [eval]:1:33
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:118:14
+    at [eval]-wrapper:6:24
+    at runScript (node:internal/process/execution:101:62)
+    at evalScript (node:internal/process/execution:133:3)
+    at node:internal/main/eval_string:51:3
+
+Node.js v20.20.2
+    Error: 
+[18:37:03]    revealed: {"status":"Sealed","body":null}
+[18:37:04] 6. wait for period 0 to end (227s), then settle via OutLayer
+[18:40:57] settle channel 0 period 0 (held 0)
+    Error: 
+       0: [91mError: Account <m2.to69.testnet> does not have enough balance (0.4990025600927262 NEAR) to cover TX cost (0.8009189985318045 NEAR).[0m
+[18:41:20]    scoring failed; period reopened
+[18:41:20]    period 0: null
+[18:41:20] E2E FAIL at settle
+[18:41:20] deleting e2e071820.to69.testnet (NEAR back to to69.testnet)

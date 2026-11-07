@@ -1,0 +1,3 @@
+=== delete=e2e071817.to69.testnet  commit 712c3a03164cccbd51ed9e115b507dddb10bddd6  Sat Nov  7 18:18:55 UTC 2026
+[18:18:59] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Account <e2e071817.to69.testnet> has been successfully deleted.
