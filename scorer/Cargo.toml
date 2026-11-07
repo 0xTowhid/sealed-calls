@@ -1,9 +1,9 @@
 [package]
 name = "scorer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
-description = "Sealed Calls scoring job for OutLayer (wasm32-wasip2): indicative $500-trade returns for Solana memecoin calls"
+description = "Sealed Calls scoring job for OutLayer (wasm32-wasip2): indicative results of trading signals from public Hyperliquid and GeckoTerminal candles"
 
 [[bin]]
 name = "scorer"

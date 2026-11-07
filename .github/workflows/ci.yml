@@ -62,11 +62,14 @@ jobs:
         with: { name: dist, path: dist }
       - name: install wasmtime
         run: curl https://wasmtime.dev/install.sh -sSf | bash
-      - name: score sample calls
+      - uses: actions/checkout@v4
+        with: { path: repo }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: score sample signals
         run: |
           mkdir -p results
-          NOW=$(($(date +%s)*1000)); POSTED=$((NOW - 2*3600*1000))
-          INPUT="{\"calls\":[{\"id\":1,\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"posted_at_ms\":$POSTED,\"horizon_min\":60},{\"id\":2,\"mint\":\"EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm\",\"posted_at_ms\":$POSTED,\"horizon_min\":60},{\"id\":3,\"mint\":\"11111111111111111111111111111111\",\"posted_at_ms\":$POSTED,\"horizon_min\":60}],\"reference_usd\":500,\"liquidity_floor_usd\":100000}"
+          INPUT=$(node repo/scripts/sample-signals.mjs)
           echo "input: $INPUT" | tee results/scorer-live.txt
           echo "$INPUT" | ~/.wasmtime/bin/wasmtime run -S http dist/scorer.wasm 2>&1 | tee -a results/scorer-live.txt
           echo | tee -a results/scorer-live.txt
