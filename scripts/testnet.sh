@@ -44,7 +44,7 @@ accounts)
     fi
   done
   sleep 5
-  for spec in "$APP:5" "$M1:0.5" "$M2:0.5"; do
+  for spec in "$APP:3.2" "$M1:0.5" "$M2:0.5"; do
     a="${spec%%:*}"; amt="${spec##*:} NEAR"
     if exists "$a"; then log "$a exists"; continue; fi
     near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
@@ -71,11 +71,11 @@ e2e)
   [ "$(curl -sL "$SCORER_URL" | sha256sum | cut -d' ' -f1)" = "$SCORER_HASH" ] || { log "FAIL scorer URL bytes do not match hash"; exit 1; }
   # 1. A fresh test club. Governor = MAIN here; gate (c) repeats this through a Sputnik DAO.
   CFG=$(cat <<J
-{"config":{"name":"E2E $(date -u +%m%d-%H%M)","epoch_minutes":15,"epoch_budget":"1000000000000000000000000","min_record":1,"horizons_min":[10],"grace_min":10,"max_calls_per_day":5,"scorer_wasm_url":"$SCORER_URL","scorer_wasm_hash":"$SCORER_HASH","outlayer":"outlayer.testnet"},"callers":["$CALLER"],"members":["$M1"]}
+{"config":{"name":"E2E $(date -u +%m%d-%H%M)","epoch_minutes":15,"epoch_budget":"100000000000000000000000","min_record":1,"horizons_min":[10],"grace_min":10,"max_calls_per_day":5,"scorer_wasm_url":"$SCORER_URL","scorer_wasm_hash":"$SCORER_HASH","outlayer":"outlayer.testnet"},"callers":["$CALLER"],"members":["$M1"]}
 J
 )
-  log "1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)"
-  call "$MAIN" "$APP" create_club "$CFG" '2 NEAR'
+  log "1. create_club (escrow 0.3 NEAR, budget 0.1 NEAR, epoch 15 min, horizon 10 min)"
+  call "$MAIN" "$APP" create_club "$CFG" '0.3 NEAR'
   CLUB=$(node -e "import('./sc.mjs').then(async m=>{for(let i=0;;i++){const c=await m.view('$APP','get_club',{club:i});if(!c){console.log(i-1);break}}})")
   [[ "$CLUB" =~ ^[0-9]+$ ]] || { log "FAIL create_club did not create a club"; exit 1; }
   log "   club id: $CLUB"; START=$(date +%s)
