@@ -1,0 +1,7 @@
+=== accounts  commit 539d2e183e9235ba20cbcdf45a7a7da5cf9f148f  Sat Nov  7 16:21:25 UTC 2026
+[16:21:34] topped up from sealedcalls-towhid-f31116.testnet
+[16:21:41] sealedcalls-towhid.testnet: Native account balance           10 NEAR 
+[16:21:41] app.sealedcalls-towhid.testnet: 
+[16:21:41] caller.sealedcalls-towhid.testnet: 
+[16:21:41] m1.sealedcalls-towhid.testnet: 
+[16:21:42] m2.sealedcalls-towhid.testnet: 

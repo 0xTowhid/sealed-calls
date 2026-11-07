@@ -1,0 +1,49 @@
+=== e2e  commit 539d2e183e9235ba20cbcdf45a7a7da5cf9f148f  Sat Nov  7 16:22:30 UTC 2026
+[16:22:30] 1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)
+    error: unexpected argument '--signer-public-key' found
+file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29
+  throw new Error(`view ${method} failed: ${last}`);
+        ^
+
+Error: view get_club failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"FuUFPhpUxVYtjkaoN2HqeZFeMSXKP3oJxB9KzbFWKPoJ","block_height":276655260,"requested_account_id":"app.sealedcalls-towhid.testnet"},"name":"UNKNOWN_ACCOUNT"},"code":-32000,"message":"Server error","data":"account app.sealedcalls-towhid.testnet does 
+    at Module.view (file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async [eval]:1:61
+
+Node.js v20.20.2
+[16:22:34]    club id: 
+[16:22:34] 2. m1.sealedcalls-towhid.testnet registers key bEc+/jzFmD/kyIN4epeSnGG9In+4xjJjUUfxXgRsX20=
+    error: unexpected argument '--signer-public-key' found
+[eval]:1
+import('./sc.mjs').then(async m=>{const c=await m.view('app.sealedcalls-towhid.testnet','get_club',{club:});console.log(JSON.stringify(c.members.filter(x=>x.pubkey).map(x=>({member:x.account,pubkey:x.pubkey}))))})
+                                                                                                         ^
+
+SyntaxError: Unexpected token '}'
+    at makeContextifyScript (node:internal/vm:185:14)
+    at node:internal/process/execution:107:22
+    at [eval]-wrapper:6:24
+    at runScript (node:internal/process/execution:101:62)
+    at evalScript (node:internal/process/execution:133:3)
+    at node:internal/main/eval_string:51:3
+
+Node.js v20.20.2
+[16:22:34] 3. seal + post_call (members: )
+ERROR: Unexpected end of JSON input
+cat: /tmp/post.json: No such file or directory
+    error: unexpected argument '--signer-public-key' found
+ERROR: Unexpected token '}', "{"club":}" is not valid JSON
+<anonymous_script>:2
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:18
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:118:14
+    at [eval]-wrapper:6:24
+    at runScript (node:internal/process/execution:101:62)
+    at evalScript (node:internal/process/execution:133:3)
+    at node:internal/main/eval_string:51:3
+
+Node.js v20.20.2
+[16:22:37] FAIL no call posted
