@@ -1,9 +1,9 @@
 [package]
 name = "sealed-calls"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
-description = "Sealed memecoin calls with forced reveal, attested scoring and escrowed caller pay"
+description = "Sealed trading signals with an uneditable public record; subscriptions pay creators in full only when signals work"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,11 +1,19 @@
-//! Sealed Calls — a club's memecoin calls become a complete public record after each call ends,
-//! scored by an attested OutLayer job, and callers are paid from the club's escrow only when
-//! their record is positive.
+//! Sealed Calls v2 — trading signals with a record nobody can edit, and subscriptions that only
+//! pay the creator in full when the signals work.
 //!
-//! What this contract guarantees: a posted call cannot be edited, deleted or hidden; it opens only
-//! after its horizon; it is wrapped to every registered member; a call nobody reveals scores −100%.
-//! What it cannot guarantee: that the timelocked copy is valid (members can reveal from their own
-//! copy), that members don't leak calls, or that callers don't trade against members elsewhere.
+//! * Anyone creates a channel and sets subscription plans (price per number of days).
+//! * A subscription pays 50% to the creator at once. The other 50% is spread over the periods
+//!   (weeks) it covers and held here. When a period settles, the creator receives that period's
+//!   held half only if their signals posted in that period have a positive record; otherwise each
+//!   subscriber can claim their part back.
+//! * A signal is sealed when posted: subscribers active at that moment can decrypt it at once
+//!   (per-signal key wrapped to each of them); everyone else can open it from drand when its
+//!   validity ends. Its sha256 commitment is fixed on-chain, so it cannot be edited or hidden.
+//! * Scoring runs in an OutLayer job (TEE) over public price data; the result comes back here.
+//!
+//! What this contract does not guarantee: that subscribers don't leak signals, that the creator
+//! doesn't trade against subscribers, or that a $500 trade could really have been filled at the
+//! scored prices. Scores are indicative.
 
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::{self, json};
@@ -18,70 +26,121 @@ use near_sdk::{
 /// drand quicknet (the chain tlock-js `mainnetClient()` uses): genesis and period in seconds.
 pub const QUICKNET_GENESIS_S: u64 = 1_692_803_367;
 pub const QUICKNET_PERIOD_S: u64 = 3;
-/// The reveal round must fall within this many seconds after the horizon ends.
+/// The reveal round must fall within this many seconds after validity ends.
 pub const ROUND_SLACK_S: u64 = 120;
-pub const MAX_MEMBERS: usize = 25;
-pub const MAX_CALLERS: usize = 25;
-pub const MAX_TLOCK_CT: usize = 2_048;
-pub const MAX_MEMBER_CT: usize = 1_024;
+pub const MIN_VALID_MIN: u32 = 15;
+pub const MAX_VALID_MIN: u32 = 43_200; // 30 days
+pub const MAX_MEMBERS: u32 = 100;
+pub const MAX_PLANS: usize = 6;
+pub const MAX_PLAN_DAYS: u32 = 366;
+pub const MAX_SUBS_PER_MEMBER: usize = 64;
+pub const MAX_TLOCK_CT: usize = 4_096;
+pub const MAX_MEMBER_CT: usize = 2_048;
 pub const MAX_WRAPPED_KEY: usize = 160;
+pub const MAX_MSG_CHARS: usize = 280;
+pub const MAX_LEVERAGE: u32 = 50;
 pub const LOSS_BPS: i32 = -10_000;
 pub const MAX_GAIN_BPS: i32 = 30_000;
-/// Phantom flat calls added to every record: S = Σr / (n + SHRINK).
+/// Phantom flat signals added to every record: S = Σr / (n + SHRINK).
 pub const SHRINK: i64 = 5;
-pub const WEIGHT_CAP: i64 = 20;
-const SCORE_CALLBACK_GAS: Gas = Gas::from_tgas(60);
+const SCORE_CALLBACK_GAS: Gas = Gas::from_tgas(80);
 const DAY_MS: u64 = 86_400_000;
 
 #[derive(BorshStorageKey)]
 #[near]
 enum Key {
-    Clubs,
-    Calls,
-    ClubCalls,
+    Channels,
+    Signals,
+    ChannelSignals,
+    PeriodSignals,
+    Members,
     Daily,
-    Epochs,
+    Periods,
+    Partial,
+    Diff,
+    Claimed,
+}
+
+// ------------------------------------------------------------------------------------ types
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub owner: AccountId,
+    /// Length of a payout period. 10080 (one week) normally; shorter on demo deployments.
+    pub period_minutes: u32,
+    /// Minutes after a signal's validity ends before it can be marked unrevealed.
+    pub grace_min: u32,
+    /// Scored signals a creator needs in a period before its held half can be released.
+    pub min_signals: u32,
+    pub max_signals_per_day: u32,
+    pub scorer_wasm_url: String,
+    pub scorer_wasm_hash: String,
+    pub outlayer: AccountId,
+    /// Reference trade size for DEX price impact, and the DEX liquidity floor (USD).
+    pub reference_usd: u32,
+    pub liquidity_floor_usd: u64,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Plan {
+    pub days: u32,
+    pub price: NearToken,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, Default)]
+pub struct Stats {
+    pub signals: u32,
+    pub scored: u32,
+    pub wins: u32,
+    pub filled: u32,
+    pub sum_bps: i64,
+    pub periods_released: u32,
+    pub periods_refunded: u32,
+    /// Everything the creator received: immediate halves, released halves and rounding dust.
+    pub earned: NearToken,
+    /// Held halves that went back to subscribers (claimable).
+    pub refundable: NearToken,
 }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug)]
-pub struct ClubConfig {
+pub struct Channel {
+    pub id: u32,
+    pub creator: AccountId,
     pub name: String,
-    pub epoch_minutes: u32,
-    pub epoch_budget: NearToken,
-    /// Scored calls a caller needs in an epoch before they can be paid (10 normally).
-    pub min_record: u32,
-    /// Allowed call horizons in minutes, e.g. [60, 240, 1440, 4320].
-    pub horizons_min: Vec<u32>,
-    /// Minutes after the horizon before a sealed call can be marked unrevealed (1440 normally).
-    pub grace_min: u32,
-    pub max_calls_per_day: u32,
-    /// OutLayer settings: the scoring job's public https URL, its sha256, and the OutLayer contract.
-    pub scorer_wasm_url: String,
-    pub scorer_wasm_hash: String,
-    pub outlayer: AccountId,
+    pub about: String,
+    pub plans: Vec<Plan>,
+    pub max_members: u32,
+    pub created_at_ms: u64,
+    /// Accounts with a membership record (active or expired), at most `max_members` active.
+    pub member_list: Vec<AccountId>,
+    pub signal_count: u32,
+    /// The next period to settle (periods settle in order).
+    pub next_period: u64,
+    /// Running sum of `diff` up to the last settled period.
+    pub level: i128,
+    pub stats: Stats,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sub {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    /// The held half of this payment.
+    pub held: NearToken,
 }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug)]
 pub struct Member {
-    pub account: AccountId,
-    /// X25519 public key, base64 (44 chars), registered by the member.
+    pub until_ms: u64,
+    /// X25519 public key, base64 (44 chars).
     pub pubkey: Option<String>,
-}
-
-#[near(serializers = [borsh, json])]
-#[derive(Clone, Debug)]
-pub struct Club {
-    pub id: u32,
-    /// Usually a Sputnik DAO: it created the club and governs the roster, members and treasury.
-    pub governor: AccountId,
-    pub config: ClubConfig,
-    pub started_at_ms: u64,
-    pub escrow: NearToken,
-    pub callers: Vec<AccountId>,
-    pub members: Vec<Member>,
-    pub call_count: u32,
+    pub subs: Vec<Sub>,
 }
 
 #[near(serializers = [borsh, json])]
@@ -93,99 +152,128 @@ pub struct WrappedKey {
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq)]
-pub enum CallStatus {
+pub enum SignalStatus {
     Sealed,
-    Revealed { mint: String, by: AccountId, at_ms: u64 },
+    Revealed { by: AccountId, at_ms: u64 },
     Unrevealed { at_ms: u64 },
 }
 
 #[near(serializers = [borsh, json])]
-#[derive(Clone, Debug)]
-pub struct Call {
-    pub id: u64,
-    pub club: u32,
-    pub caller: AccountId,
-    pub epoch: u64,
-    pub posted_at_ms: u64,
-    pub horizon_min: u32,
-    /// hex sha256 of the exact plaintext bytes that `reveal` must present.
-    pub commit: String,
-    pub reveal_round: u64,
-    /// age-armored tlock ciphertext, opens at `reveal_round`.
-    pub tlock_ct: String,
-    /// The call encrypted with a fresh per-call key (for members).
-    pub member_ct: String,
-    /// That per-call key sealed to each registered member's X25519 key.
-    pub wrapped_keys: Vec<WrappedKey>,
-    pub status: CallStatus,
-    pub score_bps: Option<i32>,
-    pub note: Option<String>,
-    /// Scorer's USD prices (decimal strings) and the estimated round-trip cost, for the public ledger.
-    pub entry_usd: Option<String>,
-    pub exit_usd: Option<String>,
-    pub cost_bps: Option<i32>,
-}
-
-/// What a revealed plaintext must contain. The commitment covers its exact bytes.
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub struct CallPayload {
-    pub v: u8,
-    pub club: u32,
-    pub caller: AccountId,
-    pub mint: String,
-    pub horizon_min: u32,
-    pub salt: String,
+#[derive(Clone, Debug, PartialEq)]
+pub struct Market {
+    /// "hyperliquid" (perps; `address` is the coin, e.g. "BTC") or "gecko" (a DEX token on
+    /// GeckoTerminal; `network` e.g. "solana", `address` the token address).
+    pub venue: String,
+    #[serde(default)]
+    pub network: Option<String>,
+    pub address: String,
+    pub symbol: String,
 }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq)]
-pub enum EpochStatus {
+pub struct SignalBody {
+    pub market: Market,
+    /// "long" or "short"
+    pub side: String,
+    pub leverage: u32,
+    /// Decimal strings, USD.
+    pub entry_low: String,
+    pub entry_high: String,
+    pub tps: Vec<String>,
+    pub sl: String,
+    pub msg: String,
+}
+
+/// What a revealed plaintext must be. The commitment covers its exact bytes.
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct SignalPayload {
+    pub v: u8,
+    pub channel: u32,
+    pub creator: AccountId,
+    pub valid_min: u32,
+    pub market: Market,
+    pub side: String,
+    pub leverage: u32,
+    pub entry_low: String,
+    pub entry_high: String,
+    pub tps: Vec<String>,
+    pub sl: String,
+    #[serde(default)]
+    pub msg: String,
+    pub salt: String,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug)]
+pub struct Signal {
+    pub id: u64,
+    pub channel: u32,
+    pub creator: AccountId,
+    pub period: u64,
+    pub posted_at_ms: u64,
+    pub valid_min: u32,
+    /// hex sha256 of the exact plaintext bytes that `reveal` must present.
+    pub commit: String,
+    pub reveal_round: u64,
+    /// age-armored tlock ciphertext; opens at `reveal_round`.
+    pub tlock_ct: String,
+    /// The signal encrypted with a fresh per-signal key (for subscribers).
+    pub member_ct: String,
+    /// That key sealed to each active subscriber's X25519 key at posting time.
+    pub wrapped_keys: Vec<WrappedKey>,
+    pub status: SignalStatus,
+    /// The revealed signal; None if sealed, unrevealed, or the revealed text was not a valid signal.
+    pub body: Option<SignalBody>,
+    pub r_bps: Option<i32>,
+    /// Scorer outcome: "tp1", "tp3", "sl", "liquidated", "expired", "not_filled", "invalid", ...
+    pub outcome: Option<String>,
+    pub fill_price: Option<String>,
+    pub exit_price: Option<String>,
+    pub cost_bps: Option<i32>,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub enum PeriodStatus {
     Settling,
     Settled,
 }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug)]
-pub struct CallerResult {
-    pub caller: AccountId,
-    pub calls: u32,
+pub struct PeriodResult {
+    pub status: PeriodStatus,
+    pub signals: u32,
     pub sum_bps: i64,
     pub score_bps: i64,
-    pub eligible: bool,
-    pub paid: NearToken,
-}
-
-#[near(serializers = [borsh, json])]
-#[derive(Clone, Debug)]
-pub struct EpochResult {
-    pub status: EpochStatus,
-    pub budget: NearToken,
-    pub paid: NearToken,
-    pub callers: Vec<CallerResult>,
+    /// true: the held half went to the creator. false: subscribers can claim it back.
+    pub released: bool,
+    pub held: NearToken,
     pub settled_at_ms: u64,
 }
 
 /// One line of the scoring job's output.
 #[near(serializers = [json])]
 #[derive(Debug, Clone)]
-pub struct CallScore {
+pub struct SignalScore {
     pub id: u64,
     pub r_bps: i32,
+    pub outcome: String,
     #[serde(default)]
-    pub entry_usd: Option<String>,
+    pub fill_price: Option<String>,
     #[serde(default)]
-    pub exit_usd: Option<String>,
+    pub exit_price: Option<String>,
     #[serde(default)]
     pub cost_bps: Option<i32>,
-    pub note: String,
 }
 
 #[near(serializers = [json])]
 #[derive(Debug, Clone)]
 pub struct ScoreOut {
     pub ok: bool,
-    pub results: Vec<CallScore>,
+    pub results: Vec<SignalScore>,
     pub error: Option<String>,
 }
 
@@ -207,120 +295,110 @@ trait OutLayer {
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct SealedCalls {
-    clubs: Vector<Club>,
-    calls: Vector<Call>,
-    /// (club, index within club) -> call id
-    club_calls: LookupMap<(u32, u32), u64>,
-    /// (club, caller, UTC day) -> calls posted
-    daily: LookupMap<(u32, AccountId, u64), u32>,
-    epochs: LookupMap<(u32, u64), EpochResult>,
+    config: Config,
+    channels: Vector<Channel>,
+    signals: Vector<Signal>,
+    /// (channel, index within channel) -> signal id
+    channel_signals: LookupMap<(u32, u32), u64>,
+    /// (channel, period) -> signal ids posted in it
+    period_signals: LookupMap<(u32, u64), Vec<u64>>,
+    members: LookupMap<(u32, AccountId), Member>,
+    /// (channel, creator's UTC day) -> signals posted
+    daily: LookupMap<(u32, u64), u32>,
+    periods: LookupMap<(u32, u64), PeriodResult>,
+    /// Held amount of partly covered periods: (channel, period) -> yocto
+    partial: LookupMap<(u32, u64), u128>,
+    /// Difference array of fully covered periods: level(p) = Σ_{q<=p} diff(q)
+    diff: LookupMap<(u32, u64), i128>,
+    /// (channel, period, member) -> refund already claimed
+    claimed: LookupMap<(u32, u64, AccountId), bool>,
 }
 
 #[near]
 impl SealedCalls {
     #[init]
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
+        validate_config(&config);
         Self {
-            clubs: Vector::new(Key::Clubs),
-            calls: Vector::new(Key::Calls),
-            club_calls: LookupMap::new(Key::ClubCalls),
+            config,
+            channels: Vector::new(Key::Channels),
+            signals: Vector::new(Key::Signals),
+            channel_signals: LookupMap::new(Key::ChannelSignals),
+            period_signals: LookupMap::new(Key::PeriodSignals),
+            members: LookupMap::new(Key::Members),
             daily: LookupMap::new(Key::Daily),
-            epochs: LookupMap::new(Key::Epochs),
+            periods: LookupMap::new(Key::Periods),
+            partial: LookupMap::new(Key::Partial),
+            diff: LookupMap::new(Key::Diff),
+            claimed: LookupMap::new(Key::Claimed),
         }
     }
 
-    // ---------------------------------------------------------------- governance (the DAO)
-
-    /// Called by the club's DAO through one FunctionCall proposal. The attached deposit, minus
-    /// storage, becomes the club's escrow.
-    #[payable]
-    pub fn create_club(&mut self, config: ClubConfig, callers: Vec<AccountId>, members: Vec<AccountId>) -> u32 {
+    /// The owner can point to a new scorer build (published, hashed) or tune limits. Period length
+    /// cannot change once channels exist.
+    pub fn set_config(&mut self, config: Config) {
+        assert_eq!(env::predecessor_account_id(), self.config.owner, "only the owner");
         validate_config(&config);
+        if self.channels.len() > 0 {
+            assert_eq!(config.period_minutes, self.config.period_minutes, "period length is fixed once channels exist");
+        }
+        self.config = config;
+        emit("config_changed", json!({ "scorer_wasm_hash": self.config.scorer_wasm_hash }));
+    }
+
+    // ---------------------------------------------------------------- creators
+
+    /// Anyone can create a channel. Attach about 0.05 NEAR for storage; the rest is refunded.
+    #[payable]
+    pub fn create_channel(&mut self, name: String, about: String, plans: Vec<Plan>, max_members: u32) -> u32 {
+        validate_channel(&name, &about, &plans, max_members, self.config.period_minutes);
         let start = env::storage_usage();
-        let id = self.clubs.len();
-        let club = Club {
+        let creator = env::predecessor_account_id();
+        let id = self.channels.len();
+        self.channels.push(Channel {
             id,
-            governor: env::predecessor_account_id(),
-            config,
-            started_at_ms: env::block_timestamp_ms(),
-            escrow: NearToken::from_yoctonear(0),
-            callers: dedup_capped(callers, MAX_CALLERS, "callers"),
-            members: dedup_capped(members, MAX_MEMBERS, "members")
-                .into_iter()
-                .map(|account| Member { account, pubkey: None })
-                .collect(),
-            call_count: 0,
-        };
-        self.clubs.push(club);
-        self.clubs.flush();
-        let escrow = charge_storage(start, env::attached_deposit());
-        self.clubs.get_mut(id).unwrap().escrow = escrow;
-        emit("club_created", json!({ "club": id, "governor": env::predecessor_account_id(), "escrow": escrow }));
+            creator: creator.clone(),
+            name,
+            about,
+            plans,
+            max_members,
+            created_at_ms: env::block_timestamp_ms(),
+            member_list: vec![],
+            signal_count: 0,
+            next_period: 0,
+            level: 0,
+            stats: Stats::default(),
+        });
+        self.channels.flush();
+        refund_rest(&creator, charge_storage(start, env::attached_deposit()));
+        emit("channel_created", json!({ "channel": id, "creator": creator }));
         id
     }
 
-    pub fn set_callers(&mut self, club: u32, callers: Vec<AccountId>) {
-        let c = self.governed(club);
-        c.callers = dedup_capped(callers, MAX_CALLERS, "callers");
-        emit("roster_changed", json!({ "club": club, "callers": c.callers }));
-    }
-
-    /// Replaces the member list. Members that stay keep their registered key.
-    pub fn set_members(&mut self, club: u32, members: Vec<AccountId>) {
-        let c = self.governed(club);
-        let old = std::mem::take(&mut c.members);
-        c.members = dedup_capped(members, MAX_MEMBERS, "members")
-            .into_iter()
-            .map(|account| {
-                let pubkey = old.iter().find(|m| m.account == account).and_then(|m| m.pubkey.clone());
-                Member { account, pubkey }
-            })
-            .collect();
-        emit("members_changed", json!({ "club": club, "members": c.members.iter().map(|m| &m.account).collect::<Vec<_>>() }));
-    }
-
-    /// Anyone can add to a club's escrow.
+    /// The creator edits the channel. New prices apply to new subscriptions only.
     #[payable]
-    pub fn fund(&mut self, club: u32) -> NearToken {
-        let c = self.clubs.get_mut(club).expect("no such club");
-        c.escrow = c.escrow.saturating_add(env::attached_deposit());
-        emit("funded", json!({ "club": club, "by": env::predecessor_account_id(), "amount": env::attached_deposit() }));
-        c.escrow
-    }
-
-    /// The governor takes unspent escrow back to its treasury (e.g. to refund members).
-    pub fn withdraw(&mut self, club: u32, amount: NearToken) -> Promise {
-        let governor = {
-            let c = self.governed(club);
-            assert!(amount <= c.escrow, "amount exceeds escrow");
-            c.escrow = c.escrow.saturating_sub(amount);
-            c.governor.clone()
-        };
-        emit("withdrawn", json!({ "club": club, "amount": amount }));
-        Promise::new(governor).transfer(amount)
-    }
-
-    // ---------------------------------------------------------------- members
-
-    /// A member registers (or rotates) their X25519 public key. Calls posted afterwards are
-    /// wrapped to it; calls posted before are not.
-    pub fn register_key(&mut self, club: u32, pubkey: String) {
-        assert!(pubkey.len() == 44 && pubkey.ends_with('='), "pubkey must be a base64 32-byte X25519 key");
+    pub fn update_channel(&mut self, channel: u32, name: String, about: String, plans: Vec<Plan>, max_members: u32) {
+        validate_channel(&name, &about, &plans, max_members, self.config.period_minutes);
+        let start = env::storage_usage();
         let me = env::predecessor_account_id();
-        let c = self.clubs.get_mut(club).expect("no such club");
-        let m = c.members.iter_mut().find(|m| m.account == me).expect("not a member of this club");
-        m.pubkey = Some(pubkey);
-        emit("key_registered", json!({ "club": club, "member": me }));
+        let c = self.channels.get_mut(channel).expect("no such channel");
+        assert_eq!(c.creator, me, "only the creator");
+        c.name = name;
+        c.about = about;
+        c.plans = plans;
+        c.max_members = max_members;
+        self.channels.flush();
+        refund_rest(&me, charge_storage_or_free(start, env::attached_deposit()));
+        emit("channel_updated", json!({ "channel": channel }));
     }
 
-    // ---------------------------------------------------------------- callers
-
-    /// Post a sealed call. Attach enough NEAR for storage (about 0.05 NEAR; the rest is refunded).
+    /// Post a sealed signal. Only the creator. Attach about 0.1 NEAR for storage; the rest is
+    /// refunded. `wrapped_keys` must cover exactly the subscribers who are active and have a key.
     #[payable]
-    pub fn post_call(
+    pub fn post_signal(
         &mut self,
-        club: u32,
-        horizon_min: u32,
+        channel: u32,
+        valid_min: u32,
         commit: String,
         reveal_round: u64,
         tlock_ct: String,
@@ -328,21 +406,20 @@ impl SealedCalls {
         wrapped_keys: Vec<WrappedKey>,
     ) -> u64 {
         let start = env::storage_usage();
-        let caller = env::predecessor_account_id();
+        let creator = env::predecessor_account_id();
         let now = env::block_timestamp_ms();
-        let c = self.clubs.get(club).expect("no such club").clone();
-        assert!(c.callers.contains(&caller), "not on this club's caller roster");
-        assert!(c.config.horizons_min.contains(&horizon_min), "horizon not allowed in this club");
+        let c = self.channels.get(channel).expect("no such channel").clone();
+        assert_eq!(c.creator, creator, "only the channel's creator posts signals");
+        assert!((MIN_VALID_MIN..=MAX_VALID_MIN).contains(&valid_min), "validity must be {MIN_VALID_MIN}..={MAX_VALID_MIN} minutes");
         assert!(is_hex64(&commit), "commit must be 64 lowercase hex chars");
         assert!(!tlock_ct.is_empty() && tlock_ct.len() <= MAX_TLOCK_CT, "tlock_ct size");
         assert!(!member_ct.is_empty() && member_ct.len() <= MAX_MEMBER_CT, "member_ct size");
-        check_round(reveal_round, now, horizon_min);
+        check_round(reveal_round, now, valid_min);
 
-        // Every registered member must get the call, and nobody else.
-        let expected: Vec<&AccountId> = c.members.iter().filter(|m| m.pubkey.is_some()).map(|m| &m.account).collect();
-        assert_eq!(wrapped_keys.len(), expected.len(), "wrap the call key to every registered member");
+        let expected = self.readers(&c, now);
+        assert_eq!(wrapped_keys.len(), expected.len(), "wrap the signal key to every active subscriber with a key ({})", expected.len());
         for w in &wrapped_keys {
-            assert!(expected.contains(&&w.member), "wrapped key for a non-member: {}", w.member);
+            assert!(expected.contains(&w.member), "wrapped key for someone who is not an active subscriber: {}", w.member);
             assert!(!w.key.is_empty() && w.key.len() <= MAX_WRAPPED_KEY, "wrapped key size");
         }
         let mut seen: Vec<&AccountId> = wrapped_keys.iter().map(|w| &w.member).collect();
@@ -350,156 +427,258 @@ impl SealedCalls {
         seen.dedup();
         assert_eq!(seen.len(), wrapped_keys.len(), "duplicate wrapped key");
 
-        let day_key = (club, caller.clone(), now / DAY_MS);
+        let day_key = (channel, now / DAY_MS);
         let today = self.daily.get(&day_key).copied().unwrap_or(0);
-        assert!(today < c.config.max_calls_per_day, "daily call limit reached");
+        assert!(today < self.config.max_signals_per_day, "daily signal limit reached");
         self.daily.insert(day_key, today + 1);
 
-        let id = self.calls.len() as u64;
-        let epoch = (now - c.started_at_ms) / (c.config.epoch_minutes as u64 * 60_000);
-        self.calls.push(Call {
+        let id = self.signals.len() as u64;
+        let period = self.period_of(&c, now);
+        self.signals.push(Signal {
             id,
-            club,
-            caller: caller.clone(),
-            epoch,
+            channel,
+            creator: creator.clone(),
+            period,
             posted_at_ms: now,
-            horizon_min,
+            valid_min,
             commit: commit.clone(),
             reveal_round,
             tlock_ct,
             member_ct,
             wrapped_keys,
-            status: CallStatus::Sealed,
-            score_bps: None,
-            note: None,
-            entry_usd: None,
-            exit_usd: None,
+            status: SignalStatus::Sealed,
+            body: None,
+            r_bps: None,
+            outcome: None,
+            fill_price: None,
+            exit_price: None,
             cost_bps: None,
         });
-        let cm = self.clubs.get_mut(club).unwrap();
-        self.club_calls.insert((club, cm.call_count), id);
-        cm.call_count += 1;
-        self.calls.flush();
-        self.club_calls.flush();
-        self.daily.flush();
-        self.clubs.flush();
-        let refund = charge_storage(start, env::attached_deposit());
-        if refund.as_yoctonear() > 0 {
-            Promise::new(caller.clone()).transfer(refund).detach();
-        }
-        emit("call_posted", json!({
-            "club": club, "call": id, "caller": caller, "epoch": epoch,
-            "horizon_min": horizon_min, "opens_at_ms": now + horizon_min as u64 * 60_000,
+        let cm = self.channels.get_mut(channel).unwrap();
+        self.channel_signals.insert((channel, cm.signal_count), id);
+        cm.signal_count += 1;
+        cm.stats.signals += 1;
+        let mut ps = self.period_signals.get(&(channel, period)).cloned().unwrap_or_default();
+        ps.push(id);
+        self.period_signals.insert((channel, period), ps);
+        self.flush_all();
+        refund_rest(&creator, charge_storage(start, env::attached_deposit()));
+        emit("signal_posted", json!({
+            "channel": channel, "signal": id, "creator": creator, "period": period,
+            "valid_min": valid_min, "opens_at_ms": now + valid_min as u64 * 60_000,
             "reveal_round": reveal_round, "commit": commit,
         }));
         id
     }
 
+    // ---------------------------------------------------------------- subscribers
+
+    /// Subscribe (or extend) with one of the channel's plans. Attach the plan price plus about
+    /// 0.02 NEAR for storage; the rest is refunded. Half the price goes to the creator now, half is
+    /// held and released period by period only if the creator's record is positive.
+    #[payable]
+    pub fn subscribe(&mut self, channel: u32, plan: u32) -> u64 {
+        let start = env::storage_usage();
+        let me = env::predecessor_account_id();
+        let now = env::block_timestamp_ms();
+        let c = self.channels.get(channel).expect("no such channel").clone();
+        let p = c.plans.get(plan as usize).expect("no such plan").clone();
+        assert_ne!(me, c.creator, "creators don't subscribe to their own channel");
+
+        let mut m = self.members.get(&(channel, me.clone())).cloned().unwrap_or(Member { until_ms: 0, pubkey: None, subs: vec![] });
+        let was_active = m.until_ms > now;
+        if !was_active {
+            let active = c.member_list.iter().filter(|a| self.members.get(&(channel, (*a).clone())).map(|x| x.until_ms > now).unwrap_or(false)).count();
+            assert!((active as u32) < c.max_members, "channel is full ({} subscribers)", c.max_members);
+        }
+        assert!(m.subs.len() < MAX_SUBS_PER_MEMBER, "too many subscriptions on this account");
+        let sub_start = m.until_ms.max(now);
+        let sub_end = sub_start + p.days as u64 * DAY_MS;
+        let price = p.price.as_yoctonear();
+        let held = price - price / 2;
+        let mut to_creator = price / 2;
+
+        if held > 0 {
+            let sub = Sub { start_ms: sub_start, end_ms: sub_end, held: NearToken::from_yoctonear(held) };
+            let (p0, pk) = (self.period_of(&c, sub_start), self.period_of(&c, sub_end - 1));
+            let first = self.share(&c, &sub, p0);
+            let mut spread = first;
+            self.add_partial(channel, p0, first);
+            if pk > p0 {
+                let last = self.share(&c, &sub, pk);
+                spread += last;
+                self.add_partial(channel, pk, last);
+            }
+            if pk > p0 + 1 {
+                let full = self.share(&c, &sub, p0 + 1);
+                spread += full * (pk - p0 - 1) as u128;
+                self.add_diff(channel, p0 + 1, full as i128);
+                self.add_diff(channel, pk, -(full as i128));
+            }
+            to_creator += held - spread; // rounding dust
+            m.subs.push(sub);
+        }
+        m.until_ms = sub_end;
+        self.members.insert((channel, me.clone()), m);
+        let cm = self.channels.get_mut(channel).unwrap();
+        if !cm.member_list.contains(&me) {
+            // Drop expired accounts so the list stays bounded.
+            let members = &self.members;
+            cm.member_list.retain(|a| members.get(&(channel, a.clone())).map(|x| x.until_ms > now).unwrap_or(false));
+            cm.member_list.push(me.clone());
+        }
+        cm.stats.earned = cm.stats.earned.saturating_add(NearToken::from_yoctonear(to_creator));
+        self.flush_all();
+
+        let need = price + storage_cost(start);
+        let deposit = env::attached_deposit().as_yoctonear();
+        assert!(deposit >= need, "attach at least {} (price + storage)", NearToken::from_yoctonear(need).exact_amount_display());
+        if to_creator > 0 {
+            Promise::new(c.creator.clone()).transfer(NearToken::from_yoctonear(to_creator)).detach();
+        }
+        refund_rest(&me, NearToken::from_yoctonear(deposit - need));
+        emit("subscribed", json!({
+            "channel": channel, "member": me, "plan": plan, "price": p.price,
+            "to_creator": NearToken::from_yoctonear(to_creator), "held": NearToken::from_yoctonear(held),
+            "until_ms": sub_end,
+        }));
+        sub_end
+    }
+
+    /// A subscriber registers (or rotates) their X25519 public key for a channel. Signals posted
+    /// afterwards are wrapped to it.
+    pub fn register_key(&mut self, channel: u32, pubkey: String) {
+        assert!(pubkey.len() == 44 && pubkey.ends_with('='), "pubkey must be a base64 32-byte X25519 key");
+        let me = env::predecessor_account_id();
+        let m = self.members.get_mut(&(channel, me.clone())).expect("not subscribed to this channel");
+        m.pubkey = Some(pubkey);
+        emit("key_registered", json!({ "channel": channel, "member": me }));
+    }
+
+    /// Claim back held halves of settled periods that were not released to the creator.
+    pub fn claim_refund(&mut self, channel: u32) -> NearToken {
+        let me = env::predecessor_account_id();
+        let (amount, periods) = self.claimable(channel, me.clone());
+        assert!(amount.as_yoctonear() > 0, "nothing to claim");
+        for p in &periods {
+            self.claimed.insert((channel, *p, me.clone()), true);
+        }
+        emit("refund_claimed", json!({ "channel": channel, "member": me, "amount": amount, "periods": periods }));
+        Promise::new(me).transfer(amount).detach();
+        amount
+    }
+
     // ---------------------------------------------------------------- anyone
 
-    /// Publish a call after its horizon. Anyone can do it: from the drand-opened tlock copy, or a
-    /// member from their own decrypted copy. Only the exact committed plaintext is accepted.
-    pub fn reveal(&mut self, call_id: u64, plaintext: String) {
+    /// Publish a signal after its validity. Anyone can do it: from the drand-opened copy, or a
+    /// subscriber from their own decrypted copy. Only the exact committed text is accepted. If that
+    /// text is not a valid signal for this channel, it is published and scores −100%.
+    pub fn reveal(&mut self, signal_id: u64, plaintext: String) {
         let now = env::block_timestamp_ms();
-        let call = self.calls.get_mut(call_id as u32).expect("no such call");
-        assert_eq!(call.status, CallStatus::Sealed, "call is not sealed");
-        assert!(now >= opens_at(call), "call is still within its horizon");
-        assert_eq!(hex(&env::sha256(plaintext.as_bytes())), call.commit, "plaintext does not match the commitment");
-        let p: CallPayload = serde_json::from_str(&plaintext).expect("plaintext is not a call payload");
-        assert_eq!(p.v, 1, "unsupported payload version");
-        assert_eq!(p.club, call.club, "payload is for another club");
-        assert_eq!(p.caller, call.caller, "payload is for another caller");
-        assert_eq!(p.horizon_min, call.horizon_min, "payload horizon differs");
-        assert!(is_solana_mint(&p.mint), "mint is not a Solana address");
-        call.status = CallStatus::Revealed { mint: p.mint.clone(), by: env::predecessor_account_id(), at_ms: now };
-        emit("call_revealed", json!({ "call": call_id, "club": call.club, "caller": call.caller, "mint": p.mint, "by": env::predecessor_account_id() }));
-    }
-
-    /// After the grace period a call nobody could reveal is final and scores −100%.
-    pub fn mark_unrevealed(&mut self, call_id: u64) {
-        let now = env::block_timestamp_ms();
-        let grace_ms = {
-            let call = self.calls.get(call_id as u32).expect("no such call");
-            self.clubs.get(call.club).unwrap().config.grace_min as u64 * 60_000
-        };
-        let call = self.calls.get_mut(call_id as u32).unwrap();
-        assert_eq!(call.status, CallStatus::Sealed, "call is not sealed");
-        assert!(now >= opens_at(call) + grace_ms, "grace period not over");
-        call.status = CallStatus::Unrevealed { at_ms: now };
-        call.score_bps = Some(LOSS_BPS);
-        call.note = Some("unrevealed".into());
-        emit("call_unrevealed", json!({ "call": call_id, "club": call.club, "caller": call.caller }));
-    }
-
-    /// Score an ended epoch and pay callers. Anyone can call it once every call in the epoch is
-    /// revealed or marked unrevealed. Attach OutLayer's compute deposit (unused part is refunded
-    /// by OutLayer to the caller of this method).
-    #[payable]
-    pub fn settle(&mut self, club: u32, epoch: u64) -> PromiseOrValue<Option<EpochResult>> {
-        let now = env::block_timestamp_ms();
-        let c = self.clubs.get(club).expect("no such club").clone();
-        let epoch_ms = c.config.epoch_minutes as u64 * 60_000;
-        assert!(now >= c.started_at_ms + (epoch + 1) * epoch_ms, "epoch has not ended");
-        if let Some(e) = self.epochs.get(&(club, epoch)) {
-            assert!(e.status != EpochStatus::Settled, "epoch already settled");
-            assert!(e.status != EpochStatus::Settling, "epoch settlement in progress");
-        }
-        let ids = self.epoch_call_ids(club, epoch);
-        for id in &ids {
-            assert!(self.calls.get(*id as u32).unwrap().status != CallStatus::Sealed, "call {id} is still sealed");
-        }
-        self.mark_duplicates(&ids);
-
-        let to_score: Vec<u64> = ids
-            .iter()
-            .copied()
-            .filter(|id| {
-                let call = self.calls.get(*id as u32).unwrap();
-                matches!(call.status, CallStatus::Revealed { .. }) && call.score_bps.is_none()
+        let s = self.signals.get_mut(signal_id as u32).expect("no such signal");
+        assert_eq!(s.status, SignalStatus::Sealed, "signal is not sealed");
+        assert!(now >= opens_at(s), "signal is still valid; it opens when its validity ends");
+        assert_eq!(hex(&env::sha256(plaintext.as_bytes())), s.commit, "text does not match the commitment");
+        let body = serde_json::from_str::<SignalPayload>(&plaintext)
+            .ok()
+            .filter(|p| p.v == 2 && p.channel == s.channel && p.creator == s.creator && p.valid_min == s.valid_min)
+            .map(|p| SignalBody {
+                market: p.market,
+                side: p.side,
+                leverage: p.leverage,
+                entry_low: p.entry_low,
+                entry_high: p.entry_high,
+                tps: p.tps,
+                sl: p.sl,
+                msg: p.msg,
             })
-            .collect();
-
-        if to_score.is_empty() {
-            let result = self.finish_epoch(club, epoch);
-            return PromiseOrValue::Value(Some(result));
+            .filter(|b| validate_body(b).is_ok());
+        s.status = SignalStatus::Revealed { by: env::predecessor_account_id(), at_ms: now };
+        if body.is_none() {
+            s.r_bps = Some(LOSS_BPS);
+            s.outcome = Some("invalid".into());
         }
+        s.body = body;
+        emit("signal_revealed", json!({
+            "signal": signal_id, "channel": s.channel, "creator": s.creator,
+            "valid": s.body.is_some(), "by": env::predecessor_account_id(),
+        }));
+    }
 
+    /// After the grace period a signal nobody revealed is final and scores −100%.
+    pub fn mark_unrevealed(&mut self, signal_id: u64) {
+        let now = env::block_timestamp_ms();
+        let grace_ms = self.config.grace_min as u64 * 60_000;
+        let s = self.signals.get_mut(signal_id as u32).expect("no such signal");
+        assert_eq!(s.status, SignalStatus::Sealed, "signal is not sealed");
+        assert!(now >= opens_at(s) + grace_ms, "grace period not over");
+        s.status = SignalStatus::Unrevealed { at_ms: now };
+        s.r_bps = Some(LOSS_BPS);
+        s.outcome = Some("unrevealed".into());
+        emit("signal_unrevealed", json!({ "signal": signal_id, "channel": s.channel, "creator": s.creator }));
+    }
+
+    /// Settle a channel's next period once it has ended and every signal posted in it is open.
+    /// Scoring runs on OutLayer; attach its compute deposit (unused part is refunded by OutLayer).
+    /// A period with nothing to score settles at once and any deposit is returned.
+    #[payable]
+    pub fn settle(&mut self, channel: u32) -> PromiseOrValue<Option<PeriodResult>> {
+        let now = env::block_timestamp_ms();
+        let c = self.channels.get(channel).expect("no such channel").clone();
+        let period = c.next_period;
+        assert!(now >= self.period_end(&c, period), "period {period} has not ended");
+        if let Some(r) = self.periods.get(&(channel, period)) {
+            assert!(r.status != PeriodStatus::Settling, "period {period} is being settled");
+        }
+        let ids = self.period_signals.get(&(channel, period)).cloned().unwrap_or_default();
+        for id in &ids {
+            assert!(self.signals.get(*id as u32).unwrap().status != SignalStatus::Sealed, "signal {id} is still sealed");
+        }
+        let to_score: Vec<u64> = ids.iter().copied().filter(|id| self.signals.get(*id as u32).unwrap().r_bps.is_none()).collect();
+        let deposit = env::attached_deposit();
+        if to_score.is_empty() {
+            refund_rest(&env::predecessor_account_id(), deposit);
+            return PromiseOrValue::Value(Some(self.finish_period(channel, period)));
+        }
+        assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
         let input: Vec<_> = to_score
             .iter()
             .map(|id| {
-                let call = self.calls.get(*id as u32).unwrap();
-                let mint = match &call.status { CallStatus::Revealed { mint, .. } => mint.clone(), _ => unreachable!() };
-                json!({ "id": id, "mint": mint, "posted_at_ms": call.posted_at_ms, "horizon_min": call.horizon_min })
+                let s = self.signals.get(*id as u32).unwrap();
+                let b = s.body.as_ref().unwrap();
+                json!({
+                    "id": id, "venue": b.market.venue, "network": b.market.network, "address": b.market.address,
+                    "side": b.side, "leverage": b.leverage, "entry_low": b.entry_low, "entry_high": b.entry_high,
+                    "tps": b.tps, "sl": b.sl, "posted_at_ms": s.posted_at_ms, "valid_min": s.valid_min,
+                })
             })
             .collect();
-        let deposit = env::attached_deposit();
-        assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute");
-        self.epochs.insert(
-            (club, epoch),
-            EpochResult { status: EpochStatus::Settling, budget: NearToken::from_yoctonear(0), paid: NearToken::from_yoctonear(0), callers: vec![], settled_at_ms: 0 },
+        self.periods.insert(
+            (channel, period),
+            PeriodResult { status: PeriodStatus::Settling, signals: 0, sum_bps: 0, score_bps: 0, released: false, held: NearToken::from_yoctonear(0), settled_at_ms: 0 },
         );
-        emit("settle_requested", json!({ "club": club, "epoch": epoch, "calls": to_score }));
-
-        let source = json!({ "WasmUrl": { "url": c.config.scorer_wasm_url, "hash": c.config.scorer_wasm_hash, "build_target": "wasm32-wasip2" } });
-        let limits = json!({ "max_instructions": 10_000_000_000u64, "max_memory_mb": 256u32, "max_execution_seconds": 120u64 });
-        let job_input = json!({ "calls": input, "reference_usd": 500, "liquidity_floor_usd": 100_000 });
+        emit("settle_requested", json!({ "channel": channel, "period": period, "signals": to_score }));
+        let cfg = &self.config;
+        let source = json!({ "WasmUrl": { "url": cfg.scorer_wasm_url, "hash": cfg.scorer_wasm_hash, "build_target": "wasm32-wasip2" } });
+        let limits = json!({ "max_instructions": 10_000_000_000u64, "max_memory_mb": 256u32, "max_execution_seconds": 180u64 });
+        let job = json!({ "signals": input, "reference_usd": cfg.reference_usd, "liquidity_floor_usd": cfg.liquidity_floor_usd });
         PromiseOrValue::Promise(
-            ext_outlayer::ext(c.config.outlayer.clone())
+            ext_outlayer::ext(cfg.outlayer.clone())
                 .with_attached_deposit(deposit)
                 .with_unused_gas_weight(1)
-                .request_execution(source, Some(limits), Some(job_input.to_string()), None, Some("Json".into()), Some(env::predecessor_account_id()), None)
-                .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_scores(club, epoch, to_score)),
+                .request_execution(source, Some(limits), Some(job.to_string()), None, Some("Json".into()), Some(env::predecessor_account_id()), None)
+                .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_scores(channel, period, to_score)),
         )
     }
 
     #[private]
     pub fn on_scores(
         &mut self,
-        club: u32,
-        epoch: u64,
+        channel: u32,
+        period: u64,
         ids: Vec<u64>,
         #[callback_result] result: Result<Option<ScoreOut>, PromiseError>,
-    ) -> Option<EpochResult> {
+    ) -> Option<PeriodResult> {
         let out = match result {
             Ok(Some(o)) if o.ok => o,
             other => {
@@ -508,213 +687,382 @@ impl SealedCalls {
                     Ok(None) => "scoring job failed or returned nothing".into(),
                     Err(_) => "OutLayer request failed".into(),
                 };
-                self.epochs.remove(&(club, epoch));
-                emit("settle_failed", json!({ "club": club, "epoch": epoch, "reason": why }));
+                self.periods.remove(&(channel, period));
+                emit("settle_failed", json!({ "channel": channel, "period": period, "reason": why }));
                 return None; // anyone can call settle again
             }
         };
         if let Err(why) = check_scores(&ids, &out.results) {
-            self.epochs.remove(&(club, epoch));
-            emit("settle_failed", json!({ "club": club, "epoch": epoch, "reason": why }));
+            self.periods.remove(&(channel, period));
+            emit("settle_failed", json!({ "channel": channel, "period": period, "reason": why }));
             return None;
         }
-        for s in &out.results {
-            let call = self.calls.get_mut(s.id as u32).unwrap();
-            call.score_bps = Some(s.r_bps.clamp(LOSS_BPS, MAX_GAIN_BPS));
-            call.note = Some(s.note.chars().take(64).collect());
-            call.entry_usd = s.entry_usd.as_ref().map(|x| x.chars().take(32).collect());
-            call.exit_usd = s.exit_usd.as_ref().map(|x| x.chars().take(32).collect());
-            call.cost_bps = s.cost_bps.map(|c| c.clamp(0, 10_000));
+        for r in &out.results {
+            let s = self.signals.get_mut(r.id as u32).unwrap();
+            s.r_bps = Some(r.r_bps.clamp(LOSS_BPS, MAX_GAIN_BPS));
+            s.outcome = Some(r.outcome.chars().take(32).collect());
+            s.fill_price = r.fill_price.as_ref().map(|x| x.chars().take(32).collect());
+            s.exit_price = r.exit_price.as_ref().map(|x| x.chars().take(32).collect());
+            s.cost_bps = r.cost_bps.map(|c| c.clamp(0, 10_000));
         }
-        Some(self.finish_epoch(club, epoch))
+        Some(self.finish_period(channel, period))
     }
 
     // ---------------------------------------------------------------- views
 
-    pub fn get_club(&self, club: u32) -> Option<Club> {
-        self.clubs.get(club).cloned()
+    pub fn get_config(&self) -> Config {
+        self.config.clone()
     }
 
-    pub fn get_call(&self, call_id: u64) -> Option<Call> {
-        self.calls.get(call_id as u32).cloned()
+    pub fn get_channel(&self, channel: u32) -> Option<Channel> {
+        self.channels.get(channel).cloned()
     }
 
-    /// Calls in a club, newest first.
-    pub fn list_calls(&self, club: u32, from_index: Option<u32>, limit: Option<u32>) -> Vec<Call> {
-        let Some(c) = self.clubs.get(club) else { return vec![] };
+    pub fn list_channels(&self, from_index: Option<u32>, limit: Option<u32>) -> Vec<Channel> {
+        let from = from_index.unwrap_or(0);
         let limit = limit.unwrap_or(50).min(100);
-        let top = from_index.unwrap_or(c.call_count).min(c.call_count);
+        (from..self.channels.len()).take(limit as usize).filter_map(|i| self.channels.get(i).cloned()).collect()
+    }
+
+    pub fn get_signal(&self, signal_id: u64) -> Option<Signal> {
+        self.signals.get(signal_id as u32).cloned()
+    }
+
+    /// Signals in a channel, newest first. `from_index` is exclusive (pass the last index seen).
+    pub fn list_signals(&self, channel: u32, from_index: Option<u32>, limit: Option<u32>) -> Vec<Signal> {
+        let Some(c) = self.channels.get(channel) else { return vec![] };
+        let limit = limit.unwrap_or(50).min(100);
+        let top = from_index.unwrap_or(c.signal_count).min(c.signal_count);
         (0..top)
             .rev()
             .take(limit as usize)
-            .filter_map(|i| self.club_calls.get(&(club, i)))
-            .filter_map(|id| self.calls.get(*id as u32).cloned())
+            .filter_map(|i| self.channel_signals.get(&(channel, i)))
+            .filter_map(|id| self.signals.get(*id as u32).cloned())
             .collect()
     }
 
-    pub fn get_epoch(&self, club: u32, epoch: u64) -> Option<EpochResult> {
-        self.epochs.get(&(club, epoch)).cloned()
+    pub fn get_member(&self, channel: u32, account: AccountId) -> Option<Member> {
+        self.members.get(&(channel, account)).cloned()
     }
 
-    pub fn current_epoch(&self, club: u32) -> u64 {
-        let c = self.clubs.get(club).expect("no such club");
-        (env::block_timestamp_ms() - c.started_at_ms) / (c.config.epoch_minutes as u64 * 60_000)
+    /// Active subscribers with a registered key: exactly who a new signal must be wrapped to.
+    pub fn readers_now(&self, channel: u32) -> Vec<(AccountId, String)> {
+        let c = self.channels.get(channel).expect("no such channel");
+        let now = env::block_timestamp_ms();
+        self.readers(c, now)
+            .into_iter()
+            .map(|a| {
+                let k = self.members.get(&(channel, a.clone())).unwrap().pubkey.clone().unwrap();
+                (a, k)
+            })
+            .collect()
+    }
+
+    /// Active subscribers (with or without a key) and when each subscription ends.
+    pub fn subscribers(&self, channel: u32) -> Vec<(AccountId, u64, bool)> {
+        let c = self.channels.get(channel).expect("no such channel");
+        let now = env::block_timestamp_ms();
+        c.member_list
+            .iter()
+            .filter_map(|a| self.members.get(&(channel, a.clone())).map(|m| (a.clone(), m.until_ms, m.pubkey.is_some())))
+            .filter(|(_, until, _)| *until > now)
+            .collect()
+    }
+
+    pub fn get_period(&self, channel: u32, period: u64) -> Option<PeriodResult> {
+        self.periods.get(&(channel, period)).cloned()
+    }
+
+    pub fn current_period(&self, channel: u32) -> u64 {
+        let c = self.channels.get(channel).expect("no such channel");
+        self.period_of(c, env::block_timestamp_ms())
+    }
+
+    /// Held amount (yocto) a period has accumulated so far — what settlement will release or refund.
+    pub fn period_held(&self, channel: u32, period: u64) -> NearToken {
+        let c = self.channels.get(channel).expect("no such channel");
+        if let Some(r) = self.periods.get(&(channel, period)) {
+            if r.status == PeriodStatus::Settled {
+                return r.held;
+            }
+        }
+        let mut level = c.level;
+        for p in c.next_period..=period {
+            level += self.diff.get(&(channel, p)).copied().unwrap_or(0);
+        }
+        NearToken::from_yoctonear(self.partial.get(&(channel, period)).copied().unwrap_or(0) + level.max(0) as u128)
+    }
+
+    /// What `account` can claim back from a channel now, and from which periods.
+    pub fn claimable(&self, channel: u32, account: AccountId) -> (NearToken, Vec<u64>) {
+        let Some(c) = self.channels.get(channel) else { return (NearToken::from_yoctonear(0), vec![]) };
+        let Some(m) = self.members.get(&(channel, account.clone())) else { return (NearToken::from_yoctonear(0), vec![]) };
+        let mut total = 0u128;
+        let mut periods = vec![];
+        let mut ps: Vec<u64> = vec![];
+        for s in &m.subs {
+            for p in self.period_of(c, s.start_ms)..=self.period_of(c, s.end_ms - 1) {
+                if p >= c.next_period {
+                    break;
+                }
+                if !ps.contains(&p) {
+                    ps.push(p);
+                }
+            }
+        }
+        for p in ps {
+            let failed = self.periods.get(&(channel, p)).map(|r| r.status == PeriodStatus::Settled && !r.released).unwrap_or(false);
+            if !failed || self.claimed.get(&(channel, p, account.clone())).is_some() {
+                continue;
+            }
+            let amount: u128 = m.subs.iter().map(|s| self.share(c, s, p)).sum();
+            if amount > 0 {
+                total += amount;
+                periods.push(p);
+            }
+        }
+        (NearToken::from_yoctonear(total), periods)
     }
 
     // ---------------------------------------------------------------- internals
 
-    fn governed(&mut self, club: u32) -> &mut Club {
-        let c = self.clubs.get_mut(club).expect("no such club");
-        assert_eq!(env::predecessor_account_id(), c.governor, "only the club governor");
-        c
+    fn flush_all(&mut self) {
+        self.channels.flush();
+        self.signals.flush();
+        self.channel_signals.flush();
+        self.period_signals.flush();
+        self.members.flush();
+        self.daily.flush();
+        self.partial.flush();
+        self.diff.flush();
     }
 
-    fn epoch_call_ids(&self, club: u32, epoch: u64) -> Vec<u64> {
-        let n = self.clubs.get(club).unwrap().call_count;
-        (0..n)
-            .filter_map(|i| self.club_calls.get(&(club, i)).copied())
-            .filter(|id| self.calls.get(*id as u32).unwrap().epoch == epoch)
+    fn period_ms(&self) -> u64 {
+        self.config.period_minutes as u64 * 60_000
+    }
+
+    fn period_of(&self, c: &Channel, t_ms: u64) -> u64 {
+        t_ms.saturating_sub(c.created_at_ms) / self.period_ms()
+    }
+
+    fn period_start(&self, c: &Channel, p: u64) -> u64 {
+        c.created_at_ms + p * self.period_ms()
+    }
+
+    fn period_end(&self, c: &Channel, p: u64) -> u64 {
+        self.period_start(c, p + 1)
+    }
+
+    /// The part of a subscription's held half that belongs to period `p` (by time overlap).
+    fn share(&self, c: &Channel, s: &Sub, p: u64) -> u128 {
+        let (ps, pe) = (self.period_start(c, p), self.period_end(c, p));
+        let overlap = s.end_ms.min(pe).saturating_sub(s.start_ms.max(ps)) as u128;
+        let len = (s.end_ms - s.start_ms) as u128;
+        let held = s.held.as_yoctonear();
+        held / len * overlap + held % len * overlap / len
+    }
+
+    fn add_partial(&mut self, channel: u32, p: u64, amount: u128) {
+        let v = self.partial.get(&(channel, p)).copied().unwrap_or(0);
+        self.partial.insert((channel, p), v + amount);
+    }
+
+    fn add_diff(&mut self, channel: u32, p: u64, amount: i128) {
+        let v = self.diff.get(&(channel, p)).copied().unwrap_or(0);
+        self.diff.insert((channel, p), v + amount);
+    }
+
+    /// Active subscribers with a registered key at `now`.
+    fn readers(&self, c: &Channel, now: u64) -> Vec<AccountId> {
+        c.member_list
+            .iter()
+            .filter(|a| self.members.get(&(c.id, (*a).clone())).map(|m| m.until_ms > now && m.pubkey.is_some()).unwrap_or(false))
+            .cloned()
             .collect()
     }
 
-    /// A second call on the same token by the same caller while the first is still open scores
-    /// −100%. (The token is sealed at posting, so this can only be enforced after reveal.)
-    fn mark_duplicates(&mut self, ids: &[u64]) {
-        let mut dups = vec![];
-        for (i, a) in ids.iter().enumerate() {
-            let ca = self.calls.get(*a as u32).unwrap();
-            let CallStatus::Revealed { mint: ma, .. } = &ca.status else { continue };
-            if ca.score_bps.is_some() {
-                continue;
-            }
-            for b in &ids[..i] {
-                let cb = self.calls.get(*b as u32).unwrap();
-                if let CallStatus::Revealed { mint: mb, .. } = &cb.status {
-                    if cb.caller == ca.caller && mb == ma && ca.posted_at_ms < opens_at(cb) {
-                        dups.push(*a);
-                        break;
-                    }
-                }
-            }
-        }
-        for id in dups {
-            let call = self.calls.get_mut(id as u32).unwrap();
-            call.score_bps = Some(LOSS_BPS);
-            call.note = Some("duplicate".into());
-        }
-    }
-
-    fn finish_epoch(&mut self, club: u32, epoch: u64) -> EpochResult {
-        let ids = self.epoch_call_ids(club, epoch);
-        let scored: Vec<(AccountId, i32)> = ids
+    fn finish_period(&mut self, channel: u32, period: u64) -> PeriodResult {
+        let ids = self.period_signals.get(&(channel, period)).cloned().unwrap_or_default();
+        let rs: Vec<i32> = ids.iter().map(|id| self.signals.get(*id as u32).unwrap().r_bps.unwrap_or(LOSS_BPS)).collect();
+        let filled = ids
             .iter()
-            .map(|id| {
-                let call = self.calls.get(*id as u32).unwrap();
-                (call.caller.clone(), call.score_bps.unwrap_or(LOSS_BPS))
+            .filter(|id| {
+                let o = self.signals.get(**id as u32).unwrap().outcome.clone().unwrap_or_default();
+                !matches!(o.as_str(), "not_filled" | "invalid" | "unrevealed" | "below_floor" | "no_market")
             })
-            .collect();
-        let (min_record, budget_cfg, escrow) = {
-            let c = self.clubs.get(club).unwrap();
-            (c.config.min_record, c.config.epoch_budget, c.escrow)
-        };
-        let budget = if budget_cfg < escrow { budget_cfg } else { escrow };
-        let mut results = aggregate(&scored, min_record);
-        let payouts = split_budget(&results, budget);
-        let mut paid = NearToken::from_yoctonear(0);
-        for (r, amount) in results.iter_mut().zip(payouts) {
-            r.paid = amount;
-            if amount.as_yoctonear() > 0 {
-                paid = paid.saturating_add(amount);
-                Promise::new(r.caller.clone()).transfer(amount).detach();
-                emit("payout", json!({ "club": club, "epoch": epoch, "caller": r.caller, "amount": amount, "score_bps": r.score_bps }));
+            .count() as u32;
+        let (sum, score) = period_score(&rs);
+        let released = rs.len() as u32 >= self.config.min_signals && score > 0;
+        let held = self.partial.get(&(channel, period)).copied().unwrap_or(0);
+        let diff = self.diff.get(&(channel, period)).copied().unwrap_or(0);
+        let c = self.channels.get_mut(channel).unwrap();
+        c.level += diff;
+        let held = NearToken::from_yoctonear(held + c.level.max(0) as u128);
+        c.next_period = period + 1;
+        c.stats.scored += rs.len() as u32;
+        c.stats.wins += rs.iter().filter(|r| **r > 0).count() as u32;
+        c.stats.filled += filled;
+        c.stats.sum_bps += sum;
+        if released {
+            c.stats.periods_released += 1;
+            c.stats.earned = c.stats.earned.saturating_add(held);
+            if held.as_yoctonear() > 0 {
+                Promise::new(c.creator.clone()).transfer(held).detach();
             }
+        } else {
+            c.stats.periods_refunded += 1;
+            c.stats.refundable = c.stats.refundable.saturating_add(held);
         }
-        let c = self.clubs.get_mut(club).unwrap();
-        c.escrow = c.escrow.saturating_sub(paid);
-        let result = EpochResult { status: EpochStatus::Settled, budget, paid, callers: results, settled_at_ms: env::block_timestamp_ms() };
-        self.epochs.insert((club, epoch), result.clone());
-        emit("epoch_settled", json!({ "club": club, "epoch": epoch, "budget": budget, "paid": paid }));
+        let result = PeriodResult {
+            status: PeriodStatus::Settled,
+            signals: rs.len() as u32,
+            sum_bps: sum,
+            score_bps: score,
+            released,
+            held,
+            settled_at_ms: env::block_timestamp_ms(),
+        };
+        self.periods.insert((channel, period), result.clone());
+        emit("period_settled", json!({
+            "channel": channel, "period": period, "signals": rs.len(), "score_bps": score,
+            "released": released, "held": held,
+        }));
         result
     }
 }
 
 // -------------------------------------------------------------------- pure helpers
 
-/// Per-caller record for an epoch: S = Σr / (n + SHRINK), in basis points.
-pub fn aggregate(scored: &[(AccountId, i32)], min_record: u32) -> Vec<CallerResult> {
-    let mut out: Vec<CallerResult> = vec![];
-    for (caller, r) in scored {
-        let e = match out.iter_mut().position(|x| &x.caller == caller) {
-            Some(i) => &mut out[i],
-            None => {
-                out.push(CallerResult { caller: caller.clone(), calls: 0, sum_bps: 0, score_bps: 0, eligible: false, paid: NearToken::from_yoctonear(0) });
-                out.last_mut().unwrap()
-            }
-        };
-        e.calls += 1;
-        e.sum_bps += *r as i64;
-    }
-    for e in &mut out {
-        e.score_bps = e.sum_bps / (e.calls as i64 + SHRINK);
-        e.eligible = e.calls >= min_record && e.score_bps > 0;
-    }
-    out
+/// (Σr, S = Σr / (n + SHRINK)) in basis points.
+pub fn period_score(rs: &[i32]) -> (i64, i64) {
+    let sum: i64 = rs.iter().map(|r| *r as i64).sum();
+    (sum, sum / (rs.len() as i64 + SHRINK))
 }
 
-/// Budget split in proportion to S × min(n, WEIGHT_CAP) among eligible callers. Rounds down.
-pub fn split_budget(results: &[CallerResult], budget: NearToken) -> Vec<NearToken> {
-    let weights: Vec<u128> = results
-        .iter()
-        .map(|r| if r.eligible { (r.score_bps * (r.calls as i64).min(WEIGHT_CAP)) as u128 } else { 0 })
-        .collect();
-    let total: u128 = weights.iter().sum();
-    weights
-        .iter()
-        .map(|w| if total == 0 { NearToken::from_yoctonear(0) } else { NearToken::from_yoctonear(budget.as_yoctonear() / total * w + budget.as_yoctonear() % total * w / total) })
-        .collect()
-}
-
-pub fn check_scores(ids: &[u64], results: &[CallScore]) -> Result<(), String> {
+pub fn check_scores(ids: &[u64], results: &[SignalScore]) -> Result<(), String> {
     if results.len() != ids.len() {
         return Err(format!("expected {} scores, got {}", ids.len(), results.len()));
     }
     for id in ids {
         if results.iter().filter(|s| s.id == *id).count() != 1 {
-            return Err(format!("call {id} missing or repeated in scores"));
+            return Err(format!("signal {id} missing or repeated in scores"));
         }
     }
     Ok(())
 }
 
-/// The drand round must open no earlier than the horizon's end and at most ROUND_SLACK_S after.
-pub fn check_round(round: u64, posted_ms: u64, horizon_min: u32) {
+/// The drand round must open no earlier than validity's end and at most ROUND_SLACK_S after.
+pub fn check_round(round: u64, posted_ms: u64, valid_min: u32) {
     assert!(round >= 1, "bad round");
     let round_s = QUICKNET_GENESIS_S + (round - 1) * QUICKNET_PERIOD_S;
-    let end_s = (posted_ms + horizon_min as u64 * 60_000).div_ceil(1000);
-    assert!(round_s >= end_s, "reveal round opens before the horizon ends");
-    assert!(round_s <= end_s + ROUND_SLACK_S, "reveal round is too far after the horizon");
+    let end_s = (posted_ms + valid_min as u64 * 60_000).div_ceil(1000);
+    assert!(round_s >= end_s, "reveal round opens before validity ends");
+    assert!(round_s <= end_s + ROUND_SLACK_S, "reveal round is too far after validity ends");
 }
 
-fn opens_at(call: &Call) -> u64 {
-    call.posted_at_ms + call.horizon_min as u64 * 60_000
+fn price(s: &str) -> Result<f64, String> {
+    if s.is_empty() || s.len() > 32 || !s.bytes().all(|b| b.is_ascii_digit() || b == b'.') || s.matches('.').count() > 1 {
+        return Err(format!("bad price {s:?}"));
+    }
+    let v: f64 = s.parse().map_err(|_| format!("bad price {s:?}"))?;
+    if !(v > 0.0 && v.is_finite()) {
+        return Err(format!("price must be positive: {s:?}"));
+    }
+    Ok(v)
 }
 
-fn validate_config(c: &ClubConfig) {
-    assert!(!c.name.is_empty() && c.name.len() <= 64, "name length");
-    assert!(c.epoch_minutes >= 10, "epoch too short");
-    assert!(!c.horizons_min.is_empty() && c.horizons_min.iter().all(|h| (10..=4320).contains(h)), "horizons must be 10..=4320 minutes");
-    assert!(c.horizons_min.iter().all(|h| *h <= c.epoch_minutes), "a horizon cannot exceed the epoch");
-    assert!(c.max_calls_per_day >= 1 && c.max_calls_per_day <= 20, "max_calls_per_day 1..=20");
-    assert!(c.min_record >= 1, "min_record >= 1");
+fn token_chars(s: &str, max: usize) -> bool {
+    !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_:.".contains(&b))
+}
+
+/// Rules a revealed signal must follow. A signal that breaks them scores −100%.
+pub fn validate_body(b: &SignalBody) -> Result<(), String> {
+    let m = &b.market;
+    match m.venue.as_str() {
+        "hyperliquid" => {
+            if m.network.is_some() {
+                return Err("hyperliquid markets have no network".into());
+            }
+            if !(1..=MAX_LEVERAGE).contains(&b.leverage) {
+                return Err(format!("leverage must be 1..={MAX_LEVERAGE}"));
+            }
+        }
+        "gecko" => {
+            let net = m.network.as_deref().unwrap_or("");
+            if !token_chars(net, 32) {
+                return Err("DEX tokens need a network".into());
+            }
+            if b.side != "long" {
+                return Err("DEX tokens can only be long".into());
+            }
+            if b.leverage != 1 {
+                return Err("DEX tokens are 1x only".into());
+            }
+        }
+        _ => return Err("unknown venue".into()),
+    }
+    if !token_chars(&m.address, 64) || m.symbol.is_empty() || m.symbol.chars().count() > 24 {
+        return Err("bad market".into());
+    }
+    let long = match b.side.as_str() {
+        "long" => true,
+        "short" => false,
+        _ => return Err("side must be long or short".into()),
+    };
+    let (lo, hi, sl) = (price(&b.entry_low)?, price(&b.entry_high)?, price(&b.sl)?);
+    if lo > hi {
+        return Err("entry low is above entry high".into());
+    }
+    if b.tps.is_empty() || b.tps.len() > 3 {
+        return Err("1 to 3 take-profits".into());
+    }
+    let tps: Vec<f64> = b.tps.iter().map(|t| price(t)).collect::<Result<_, _>>()?;
+    if long {
+        if sl >= lo {
+            return Err("stop loss must be below the entry range".into());
+        }
+        if tps.iter().any(|t| *t <= hi) || tps.windows(2).any(|w| w[1] <= w[0]) {
+            return Err("take-profits must be above the entry range, rising".into());
+        }
+    } else {
+        if sl <= hi {
+            return Err("stop loss must be above the entry range".into());
+        }
+        if tps.iter().any(|t| *t >= lo) || tps.windows(2).any(|w| w[1] >= w[0]) {
+            return Err("take-profits must be below the entry range, falling".into());
+        }
+    }
+    if b.msg.chars().count() > MAX_MSG_CHARS {
+        return Err("message too long".into());
+    }
+    Ok(())
+}
+
+fn opens_at(s: &Signal) -> u64 {
+    s.posted_at_ms + s.valid_min as u64 * 60_000
+}
+
+fn validate_config(c: &Config) {
+    assert!(c.period_minutes >= 10, "period too short");
+    assert!(c.max_signals_per_day >= 1 && c.max_signals_per_day <= 50, "max_signals_per_day 1..=50");
+    assert!(c.min_signals >= 1, "min_signals >= 1");
     assert!(c.scorer_wasm_url.starts_with("https://"), "scorer_wasm_url must be https");
     assert!(is_hex64(&c.scorer_wasm_hash), "scorer_wasm_hash must be 64 lowercase hex chars");
 }
 
-fn dedup_capped(mut v: Vec<AccountId>, cap: usize, what: &str) -> Vec<AccountId> {
-    let mut seen = vec![];
-    v.retain(|a| if seen.contains(a) { false } else { seen.push(a.clone()); true });
-    assert!(v.len() <= cap, "too many {what} (max {cap})");
-    v
+fn validate_channel(name: &str, about: &str, plans: &[Plan], max_members: u32, period_minutes: u32) {
+    assert!(!name.trim().is_empty() && name.chars().count() <= 48, "name: 1..=48 characters");
+    assert!(about.chars().count() <= 400, "about: at most 400 characters");
+    assert!(!plans.is_empty() && plans.len() <= MAX_PLANS, "1..={MAX_PLANS} plans");
+    for p in plans {
+        assert!((1..=MAX_PLAN_DAYS).contains(&p.days), "plan days must be 1..={MAX_PLAN_DAYS}");
+    }
+    let _ = period_minutes;
+    assert!((1..=MAX_MEMBERS).contains(&max_members), "max subscribers 1..={MAX_MEMBERS}");
+}
+
+fn storage_cost(start: u64) -> u128 {
+    env::storage_byte_cost().as_yoctonear() * env::storage_usage().saturating_sub(start) as u128
 }
 
 /// Charges storage added since `start` against `deposit`; returns what is left.
@@ -725,13 +1073,22 @@ fn charge_storage(start: u64, deposit: NearToken) -> NearToken {
     deposit.saturating_sub(cost)
 }
 
-pub fn is_hex64(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+/// Like `charge_storage`, but storage that shrank costs nothing.
+fn charge_storage_or_free(start: u64, deposit: NearToken) -> NearToken {
+    if env::storage_usage() <= start {
+        return deposit;
+    }
+    charge_storage(start, deposit)
 }
 
-pub fn is_solana_mint(s: &str) -> bool {
-    const B58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    (32..=44).contains(&s.len()) && s.chars().all(|ch| B58.contains(ch))
+fn refund_rest(to: &AccountId, amount: NearToken) {
+    if amount.as_yoctonear() > 0 {
+        Promise::new(to.clone()).transfer(amount).detach();
+    }
+}
+
+pub fn is_hex64(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -742,7 +1099,7 @@ fn hex(bytes: &[u8]) -> String {
 fn emit(event: &str, data: serde_json::Value) {
     env::log_str(&format!(
         "EVENT_JSON:{}",
-        json!({ "standard": "sealedcalls", "version": "1.0.0", "event": event, "data": [data] })
+        json!({ "standard": "sealedcalls", "version": "2.0.0", "event": event, "data": [data] })
     ));
 }
 
