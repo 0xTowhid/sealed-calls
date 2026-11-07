@@ -1,0 +1,11 @@
+=== deploy  commit f8674e4a28b38753c86b5d87ea0b7ee4ab1c30b9  Sat Nov  7 18:16:33 UTC 2026
+[18:16:37] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+│    Transaction ID: J2FBV6N2wzhUx257fYjCJfnT1TWuZXr5AyuQFExMrzqr
+New account <app.to69.testnet> has been successfully created.
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm
+[18:17:31] wasm sha256 a5b2627167667d2eec3f1142fc74db968d726e5a4c921461892b3969b671533e
+│    Transaction ID: GZvnxMLjcTL4dykSAfiSzavBUe2urm8sU2MDRfccuAA2
+Error: 
+   0: [91mError: Receipt action can't be completed, because the remaining balance will not be enough to cover storage.
+[18:17:47] config: ERROR: view get_config failed: "wasm execution failed with error: CompilationError(CodeDoesNotExist { account_id: \"app.to69.testnet\" })"

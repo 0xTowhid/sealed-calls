@@ -1,0 +1,5 @@
+=== wipe-app  commit f8674e4a28b38753c86b5d87ea0b7ee4ab1c30b9  Sat Nov  7 18:16:18 UTC 2026
+[18:16:21] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+│    Transaction ID: DX3VnxFhB4Qz7QZSZ35z2tGv4ppoagg3ECmnRjdSn938
+Account <app.to69.testnet> has been successfully deleted.
+[18:16:33] to69.testnet: Native account balance           8.7807750837183222 NEAR 
