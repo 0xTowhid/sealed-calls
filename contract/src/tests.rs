@@ -280,8 +280,8 @@ fn full_epoch_settles_through_scores_and_pays() {
     let out = ScoreOut {
         ok: true,
         results: vec![
-            CallScore { id: a, r_bps: 8_000, note: "ok".into() },
-            CallScore { id: b, r_bps: 4_000, note: "ok".into() },
+            CallScore { id: a, r_bps: 8_000, note: "ok".into(), entry_usd: Some("0.0000274".into()), exit_usd: Some("0.0000497".into()), cost_bps: Some(120) },
+            CallScore { id: b, r_bps: 4_000, note: "ok".into(), entry_usd: None, exit_usd: None, cost_bps: None },
         ],
         error: None,
     };
@@ -293,6 +293,8 @@ fn full_epoch_settles_through_scores_and_pays() {
     assert_eq!(r.paid, NearToken::from_near(5)); // sole eligible caller takes the epoch budget
     assert_eq!(c.get_club(0).unwrap().escrow, escrow_before.saturating_sub(NearToken::from_near(5)));
     assert!(get_logs().iter().any(|l| l.contains("\"event\":\"payout\"")));
+    let ca = c.get_call(a).unwrap();
+    assert_eq!((ca.entry_usd.as_deref(), ca.exit_usd.as_deref(), ca.cost_bps), (Some("0.0000274"), Some("0.0000497"), Some(120)));
 }
 
 #[test]

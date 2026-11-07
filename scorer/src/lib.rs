@@ -37,6 +37,13 @@ pub struct CallScore {
     pub id: u64,
     pub r_bps: i32,
     pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_usd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_usd: Option<String>,
+    /// Estimated round-trip cost of the $500 trade, in basis points.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_bps: Option<i32>,
 }
 
 #[derive(Serialize, Debug)]
@@ -123,7 +130,7 @@ pub struct Fetched<'a> {
 pub fn score_call(call: &CallIn, d: &Fetched, ref_usd: f64, floor_usd: f64) -> CallScore {
     let posted_s = call.posted_at_ms / 1000;
     let end_s = (call.posted_at_ms + call.horizon_min as u64 * 60_000) / 1000;
-    let lose = |note: &str| CallScore { id: call.id, r_bps: LOSS_BPS, note: note.into() };
+    let lose = |note: &str| CallScore { id: call.id, r_bps: LOSS_BPS, note: note.into(), entry_usd: None, exit_usd: None, cost_bps: None };
 
     let Some(exit_pool) = pick_pool(d.pools, None) else { return lose("no_sol_usdc_pool") };
     if exit_pool.liquidity_usd < floor_usd {
@@ -132,8 +139,25 @@ pub fn score_call(call: &CallIn, d: &Fetched, ref_usd: f64, floor_usd: f64) -> C
     let Some(entry_pool) = pick_pool(d.pools, Some(posted_s)) else { return lose("no_pool_at_post") };
     let Some(entry) = entry_price(d.entry_candles, posted_s) else { return lose("no_entry_trade") };
     let Some((exit, how)) = exit_price(d.exit_candles, end_s) else { return lose("no_exit_trades") };
-    let r = net_return_bps(entry, exit, side_cost(entry_pool, ref_usd), side_cost(exit_pool, ref_usd));
-    CallScore { id: call.id, r_bps: r, note: how.into() }
+    let (c_in, c_out) = (side_cost(entry_pool, ref_usd), side_cost(exit_pool, ref_usd));
+    let r = net_return_bps(entry, exit, c_in, c_out);
+    CallScore {
+        id: call.id,
+        r_bps: r,
+        note: how.into(),
+        entry_usd: Some(sig6(entry)),
+        exit_usd: Some(sig6(exit)),
+        cost_bps: Some(((c_in + c_out) * 10_000.0).round() as i32),
+    }
+}
+
+/// A price with six significant digits, as a plain decimal string (no exponent).
+pub fn sig6(x: f64) -> String {
+    if !(x.is_finite() && x > 0.0) {
+        return "0".into();
+    }
+    let decimals = (5 - x.log10().floor() as i32).clamp(0, 18) as usize;
+    format!("{x:.decimals$}")
 }
 
 /// Parses GeckoTerminal `/networks/solana/tokens/{mint}/pools` into eligible pools.
@@ -289,6 +313,13 @@ mod tests {
         assert_eq!(p[0].fee, Some(0.0025));
         let o = serde_json::json!({ "data": { "attributes": { "ohlcv_list": [[1_704_458_100u64, 1, 1, 1, "1.5", 20]] } } });
         assert_eq!(parse_candles(&o), vec![c(1_704_458_100, 1.5, 20.0)]);
+    }
+
+    #[test]
+    fn prices_print_six_significant_digits() {
+        assert_eq!(sig6(0.000002787327212378393), "0.00000278733");
+        assert_eq!(sig6(1.93212), "1.93212");
+        assert_eq!(sig6(64012.5), "64012.5");
     }
 
     #[test]

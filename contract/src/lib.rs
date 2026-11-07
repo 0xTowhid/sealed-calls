@@ -120,6 +120,10 @@ pub struct Call {
     pub status: CallStatus,
     pub score_bps: Option<i32>,
     pub note: Option<String>,
+    /// Scorer's USD prices (decimal strings) and the estimated round-trip cost, for the public ledger.
+    pub entry_usd: Option<String>,
+    pub exit_usd: Option<String>,
+    pub cost_bps: Option<i32>,
 }
 
 /// What a revealed plaintext must contain. The commitment covers its exact bytes.
@@ -168,6 +172,12 @@ pub struct EpochResult {
 pub struct CallScore {
     pub id: u64,
     pub r_bps: i32,
+    #[serde(default)]
+    pub entry_usd: Option<String>,
+    #[serde(default)]
+    pub exit_usd: Option<String>,
+    #[serde(default)]
+    pub cost_bps: Option<i32>,
     pub note: String,
 }
 
@@ -362,6 +372,9 @@ impl SealedCalls {
             status: CallStatus::Sealed,
             score_bps: None,
             note: None,
+            entry_usd: None,
+            exit_usd: None,
+            cost_bps: None,
         });
         let cm = self.clubs.get_mut(club).unwrap();
         self.club_calls.insert((club, cm.call_count), id);
@@ -509,6 +522,9 @@ impl SealedCalls {
             let call = self.calls.get_mut(s.id as u32).unwrap();
             call.score_bps = Some(s.r_bps.clamp(LOSS_BPS, MAX_GAIN_BPS));
             call.note = Some(s.note.chars().take(64).collect());
+            call.entry_usd = s.entry_usd.as_ref().map(|x| x.chars().take(32).collect());
+            call.exit_usd = s.exit_usd.as_ref().map(|x| x.chars().take(32).collect());
+            call.cost_bps = s.cost_bps.map(|c| c.clamp(0, 10_000));
         }
         Some(self.finish_epoch(club, epoch))
     }
