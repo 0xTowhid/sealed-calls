@@ -1,0 +1,7 @@
+=== deploy  commit 7e5ebeec5a60c9776dbe8af7974706e2adce760d  Sat Nov  7 17:14:49 UTC 2026
+[17:14:53] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm
+[17:15:28] wasm sha256 e5611ce626e36983a2ce7738cf7b7ee3660249eda5e01dc5327f2f2e0bdcb5bc
+│    Transaction ID: F3uu2VQBRoNFeZudi6qKhqLeFzZPmGcsvZL7UdpHTsk
+[17:15:40] list_calls on club 0: []

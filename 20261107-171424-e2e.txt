@@ -1,0 +1,45 @@
+=== e2e  commit 7e5ebeec5a60c9776dbe8af7974706e2adce760d  Sat Nov  7 17:15:40 UTC 2026
+[17:15:43] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[17:15:43] 1. create_club (escrow 0.3 NEAR, budget 0.1 NEAR, epoch 15 min, horizon 10 min)
+    │    Transaction ID: 6TWcNB6V4BffgNPedDMFaXKvEhy3r2yz3BmYgq6BffUL
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"club_created","data":[{"club":0,"governor":"to69.testnet","escrow":"296060000000000000000000"}]}
+    Function execution return value (printed to stdout):
+[17:15:49]    club id: 0
+[17:15:49] 2. m1.to69.testnet registers key 6czPFkHdmhI2bkwZFHTgZAQOlQwe8oOWbo82TRpuNDU=
+    │    Transaction ID: DnDv7a9hdDh1imbuafz2HD4h1rXSXP6G8GdrGpjzrmXD
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"key_registered","data":[{"club":0,"member":"m1.to69.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[17:15:54] 3. seal + post_call (members: [{"member":"m1.to69.testnet","pubkey":"6czPFkHdmhI2bkwZFHTgZAQOlQwe8oOWbo82TRpuNDU="}])
+{"commit":"5a6c8d9ad24b725aeb7f4a85f93031b0efc351030d0cb6590be4db420c62347f","reveal_round":33756350,"tlock_bytes":763,"wrapped":1}
+    │    Transaction ID: 56qMWDBP5JYkxSQuQ6Xoe5jm64pTtTCwFWpyMUw8FiPt
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"call_posted","data":[{"club":0,"call":0,"caller":"to69.testnet","epoch":0,"horizon_min":10,"opens_at_ms":1794072356357,"reveal_round":33756350,"commit":"5a6c8d9ad24b725aeb7f4a85f93031b0efc351030d0cb6590be4db420c62347f"}]}
+    Function execution return value (printed to stdout):
+[17:16:03]    call 0: status "Sealed", opens at 2026-11-07T17:25:56.357Z
+[17:16:03] 4. member decrypts now: {"plaintext":"{\"v\":1,\"club\":0,\"caller\":\"to69.testnet\",\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"horizon_min\":10,\"salt\":\"48349ee816d46de0e4385afdaf5d55f9\"}","matches":true}
+[17:16:04]    public tlock-open now (must fail): ERROR: It's too early to decrypt the ciphertext - decryptable at round 33756350
+[17:16:04]    early reveal attempt (must fail):
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: H8TGvD2ggHD3z5srYJduKwHURz327RocXr7dFpF3fpSp
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:406:9:\ncall is still within its horizon")[0m
+[17:16:08] 5. waiting for the horizon and drand round (~11 min)
+beacon received: {"round":33756350,"randomness":"b55e7a193bc15e7858851419f8da1b35b3c588a5be6e57a4b8c2ef4d7b0a73ad","signature":"b38e4b2d97ef2540e8ea8d5881bdd139029995559760cdaf595198b847b31e07b67048334f9a65077e8fa263ff438309"}
+[17:27:19]    tlock-open: {"plaintext":"{\"v\":1,\"club\":0,\"caller\":\"to69.testnet\",\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"horizon_min\":10,\"salt\":\"48349ee816d46de0e4385afdaf5d55f9\"}","matches":true}
+    │    Transaction ID: 2oG2JqugappM3uDvNfj2vZELSsgkKrBy15CYdNeQuFkf
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"call_revealed","data":[{"call":0,"club":0,"caller":"to69.testnet","mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.to69.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[17:27:27]    status after reveal: {"Revealed":{"mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.to69.testnet","at_ms":1794072441159}}
+[17:31:19] 6. settle epoch 0 via OutLayer (caller balance before: Native account balance           5.2590862086229606 NEAR )
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: ctPpraxXRW3czsQArTy14CVPThiCNgAfroBdbyTgD5L
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:449:13:\ncall 1 is still sealed")[0m
+[17:31:44]    epoch reset: scoring failed (see settle_failed event above)
+[17:31:44]    epoch result: null
+[17:31:45]    call after scoring: {"score_bps":null,"note":null}
+[17:31:47]    caller balance after: Native account balance           5.2588729602436776 NEAR 
+[17:31:47] E2E FAIL at settle

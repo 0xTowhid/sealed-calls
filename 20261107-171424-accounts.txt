@@ -1,0 +1,10 @@
+=== accounts  commit 7e5ebeec5a60c9776dbe8af7974706e2adce760d  Sat Nov  7 17:14:24 UTC 2026
+[17:14:27] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+│    Transaction ID: GRvHAnWq1DKc3XbbcvTVCmFzmBKAnXAmLTFmP3nQuJL7
+New account <app.to69.testnet> has been successfully created.
+[17:14:44] m1.to69.testnet exists
+[17:14:45] m2.to69.testnet exists
+[17:14:46] to69.testnet: Native account balance           5.5884882638875 NEAR 
+[17:14:47] app.to69.testnet: Native account balance           3.2 NEAR 
+[17:14:48] m1.to69.testnet: Native account balance           0.5 NEAR 
+[17:14:49] m2.to69.testnet: Native account balance           0.5 NEAR 
