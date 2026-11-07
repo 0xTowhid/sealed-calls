@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { call, currentPeriod, getConfig, listChannels, periodHeld, readersNow, subscribers } from "../near";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { call, currentPeriod, getConfig, listChannels, periodHeld, readersNow, subscribers, view } from "../near";
 import { useLoad, useNow } from "../data";
 import { dur, near, pct, periodWord, planName, price, sig, when } from "../format";
-import { seal } from "../crypto";
+import { creatorSecret, exportSecret, importSecret, openWithKey, seal, signalKey, wrapFor } from "../crypto";
 import { priceOf, searchMarkets, type Found } from "../markets";
 import { Act, SignalFace } from "../ui";
 import { GAS_100, HL_TAKER_FEE, NEAR } from "../config";
-import type { Channel, SignalBody } from "../types";
+import type { Channel, Signal, SignalBody } from "../types";
+import { isSealed, opensAt } from "../types";
 
 async function load(account: string) {
   const [cfg, channels] = await Promise.all([getConfig(), listChannels()]);
@@ -163,7 +164,9 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
   const post = async () => {
     if (!body || problem) return;
     const rs = await readersNow(ch.id);
-    const { args } = await seal({ channel: ch.id, creator: account, validMin, signal: body, readers: rs.map(([member, pubkey]) => ({ member, pubkey })) });
+    const secret = creatorSecret(account, true);
+    if (!secret) throw new Error("This browser can't store your creator key (private window?).");
+    const { args } = await seal({ channel: ch.id, creator: account, validMin, signal: body, readers: rs.map(([member, pubkey]) => ({ member, pubkey })), secret });
     await call("post_signal", args, NEAR(0.1), GAS_100);
     setPosted(`Posted. ${rs.length} subscriber${rs.length === 1 ? "" : "s"} can read it now; it opens for everyone ${when(Date.now() + validMin * 60_000)}.`);
     setSel(null); setQ(""); setFound([]); setLo(""); setHi(""); setTps(["", "", ""]); setSl(""); setMsg("");
@@ -263,6 +266,8 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
           </div>
         </section>
 
+        <LateAccess ch={ch} account={account} />
+
         <section className="sheet" style={{ marginTop: 26 }}>
           <div className="row-between"><h2>Who reads your signals</h2><a href={`#/c/${ch.id}`} className="small">Your public page</a></div>
           <p className="sub">{subs.length} active subscriber{subs.length === 1 ? "" : "s"} of {ch.max_members}. Earned so far: <b>{near(ch.stats.earned)}</b>.</p>
@@ -272,5 +277,102 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
         </section>
       </div>
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ late access
+
+type Share = { live: number; shared: string[]; waiting: number; cantOpen: number; error: string | null };
+
+/**
+ * While the desk is open, wraps live (sealed, still valid) signals to subscribers who joined or
+ * set up a browser after the signal was posted. Keys are re-derived from this browser's creator
+ * secret; signals sealed with another secret can't be shared from here.
+ */
+function LateAccess({ ch, account }: { ch: Channel; account: string }) {
+  const [st, setSt] = useState<Share | null>(null);
+  const [auto, setAuto] = useState(true);
+  const [restore, setRestore] = useState("");
+  const [copied, setCopied] = useState(false);
+  const busy = useRef(false);
+
+  const pass = async (send: boolean) => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const secret = creatorSecret(account);
+      const now = Date.now();
+      const sigs = (await view<Signal[]>("list_signals", { channel: ch.id, limit: 50 })).filter((s) => isSealed(s) && opensAt(s) > now + 30_000);
+      const readers = await readersNow(ch.id);
+      const items: [number, { member: string; key: string }[]][] = [];
+      const names = new Set<string>();
+      let waiting = 0, cantOpen = 0;
+      for (const s of sigs) {
+        const missing = readers.filter(([m]) => !s.wrapped_keys.some((w) => w.member === m));
+        if (!missing.length) continue;
+        waiting += missing.length;
+        if (!secret) { cantOpen++; continue; }
+        const key = await signalKey(secret, s.commit);
+        if (!(await openWithKey(s, key))) { cantOpen++; continue; }
+        items.push([s.id, await Promise.all(missing.map(async ([member, pub]) => ({ member, key: await wrapFor(key, pub) })))]);
+        missing.forEach(([m]) => names.add(m));
+      }
+      let shared: string[] = [];
+      let error: string | null = null;
+      if (send && items.length) {
+        try {
+          await call("share_signals", { items: items.slice(0, 20) }, "0", GAS_100);
+          shared = [...names];
+          waiting = 0;
+        } catch (e) {
+          error = e instanceof Error ? e.message : String(e);
+          setAuto(false); // don't keep asking the wallet after a refusal
+        }
+      }
+      setSt({ live: sigs.length, shared, waiting, cantOpen, error });
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  useEffect(() => {
+    pass(auto);
+    if (!auto) return;
+    const t = setInterval(() => pass(true), 30_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ch.id, account, auto]);
+
+  const code = exportSecret(account);
+  return (
+    <section className="sheet" style={{ marginTop: 26 }}>
+      <h2>Late subscribers</h2>
+      <p className="sub">
+        Someone who subscribes while a signal is live gets it while this page is open: it shares your live signals with new subscribers every 30 seconds.
+      </p>
+      {st && (
+        <dl className="kv">
+          <dt>Live signals</dt><dd>{st.live}</dd>
+          <dt>Waiting</dt><dd>{st.waiting ? `${st.waiting} share${st.waiting > 1 ? "s" : ""} pending` : "every active subscriber has every live signal"}</dd>
+          {st.shared.length > 0 && <><dt>Just shared</dt><dd className="gain">with {st.shared.join(", ")}</dd></>}
+          {st.cantOpen > 0 && <><dt>Can't share</dt><dd className="loss">{st.cantOpen} signal{st.cantOpen > 1 ? "s were" : " was"} posted from another browser or before late access existed. Paste that browser's creator key below.</dd></>}
+        </dl>
+      )}
+      {st?.error && <div className="hint bad">{st.error}</div>}
+      {!auto && st && st.waiting > 0 && <div style={{ marginTop: 10 }}><button className="btn small" onClick={() => setAuto(true)}>Share now</button></div>}
+      <details className="keybox">
+        <summary>Creator key for this browser</summary>
+        <p className="fine">Your signals are locked with keys made from a secret stored only in this browser. To post or share from another device, copy this code there. Anyone with it can read your live signals: keep it private.</p>
+        {code ? (
+          <button className="btn small ghost" onClick={async () => { await navigator.clipboard.writeText(code); setCopied(true); }}>{copied ? "Copied" : "Copy key"}</button>
+        ) : (
+          <p className="fine">No key yet: one is created when you post your first signal from this browser.</p>
+        )}
+        <div className="two" style={{ marginTop: 10 }}>
+          <input type="text" placeholder="Paste a key from another browser" value={restore} onChange={(e) => setRestore(e.target.value)} />
+          <Act className="btn small" label="Use this key" disabled={!restore.trim()} run={async () => { importSecret(account, restore); setRestore(""); await pass(auto); }} />
+        </div>
+      </details>
+    </section>
   );
 }

@@ -20,7 +20,7 @@ export const roundTimeMs = (round: number) => (QUICKNET_GENESIS_S + (round - 1) 
 
 export type Reader = { member: string; pubkey: string };
 
-export async function seal(p: { channel: number; creator: string; validMin: number; signal: SignalBody; readers: Reader[]; latencyS?: number }) {
+export async function seal(p: { channel: number; creator: string; validMin: number; signal: SignalBody; readers: Reader[]; secret: Uint8Array; latencyS?: number }) {
   await sodium.ready;
   const salt = hexOf(crypto.getRandomValues(new Uint8Array(16)));
   const s = p.signal;
@@ -35,7 +35,9 @@ export async function seal(p: { channel: number; creator: string; validMin: numb
   const endS = Math.floor(Date.now() / 1000) + p.validMin * 60 + (p.latencyS ?? 60);
   const reveal_round = roundFor(endS);
   const tlock_ct = await timelockEncrypt(reveal_round, Buffer.from(plaintext), mainnetClient());
-  const key = sodium.randombytes_buf(sodium.crypto_secretbox_KEYBYTES);
+  // The per-signal key is derived from the creator's secret, so the creator can re-share a live
+  // signal with subscribers who join later (late access) from any browser holding that secret.
+  const key = await signalKey(p.secret, commit);
   const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
   const box = sodium.crypto_secretbox_easy(sodium.from_string(plaintext), nonce, key);
   const member_ct = b64(new Uint8Array([...nonce, ...box]));
@@ -93,4 +95,51 @@ export async function newMemberKey(channel: number, account: string): Promise<Me
     /* private window: the key lives only for this session */
   }
   return key;
+}
+
+// ------------------------------------------------------------- creator secret (late access)
+const cslot = (account: string) => `sc2:creator-secret:${CONTRACT}:${account}`;
+
+/** The creator's 32-byte secret in this browser; created on first use when `create` is set. */
+export function creatorSecret(account: string, create = false): Uint8Array | null {
+  try {
+    const raw = localStorage.getItem(cslot(account));
+    if (raw) return unb64(raw);
+    if (!create) return null;
+    const s = crypto.getRandomValues(new Uint8Array(32));
+    localStorage.setItem(cslot(account), b64(s));
+    return s;
+  } catch {
+    return null;
+  }
+}
+export const exportSecret = (account: string) => { const s = creatorSecret(account); return s ? b64(s) : null; };
+export function importSecret(account: string, code: string) {
+  const s = unb64(code.trim());
+  if (s.length !== 32) throw new Error("That isn't a creator key backup code.");
+  localStorage.setItem(cslot(account), b64(s));
+}
+
+/** HMAC-SHA256(secret, "sealed-calls v2 signal|" + commit): the signal's 32-byte key. */
+export async function signalKey(secret: Uint8Array, commit: string): Promise<Uint8Array> {
+  const k = await crypto.subtle.importKey("raw", new Uint8Array(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`sealed-calls v2 signal|${commit}`)));
+}
+
+/** Opens a signal with its own key (the creator's view); null if the key doesn't fit. */
+export async function openWithKey(s: Signal, key: Uint8Array): Promise<Opened | null> {
+  await sodium.ready;
+  try {
+    const raw = unb64(s.member_ct);
+    const nb = sodium.crypto_secretbox_NONCEBYTES;
+    const plaintext = sodium.to_string(sodium.crypto_secretbox_open_easy(raw.slice(nb), raw.slice(0, nb), key));
+    return opened(plaintext, s.commit);
+  } catch {
+    return null;
+  }
+}
+
+export async function wrapFor(key: Uint8Array, pubkey: string) {
+  await sodium.ready;
+  return b64(sodium.crypto_box_seal(key, unb64(pubkey)));
 }

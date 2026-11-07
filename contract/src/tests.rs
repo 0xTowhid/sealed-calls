@@ -494,3 +494,54 @@ fn score_formula() {
     assert_eq!(period_score(&[]), (0, 0));
     assert_eq!(period_score(&[-10_000, 30_000]).1, 20_000 / 7);
 }
+
+// ------------------------------------------------------------------ late access
+
+fn late_reader(c: &mut SealedCalls, at_ms: u64) {
+    ctx("m3.testnet", at_ms, near(3));
+    c.subscribe(0, 0);
+    c.register_key(0, PK_B.into());
+}
+
+#[test]
+fn creator_shares_a_live_signal_with_a_late_subscriber() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
+    late_reader(&mut c, T0_MS + 60_000);
+    ctx("alice.testnet", T0_MS + 70_000, 0);
+    let n = c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }, WrappedKey { member: acc("m1.testnet"), key: "again".into() }])]);
+    assert_eq!(n, 1); // m1 already had a key: skipped
+    let s = c.get_signal(id).unwrap();
+    assert_eq!(s.wrapped_keys.len(), 2);
+    assert_eq!(s.wrapped_keys[0].key, "wrapped");
+    assert!(logs_have("signal_shared"));
+}
+
+#[test]
+#[should_panic(expected = "only the signal's creator can share it")]
+fn only_the_creator_shares() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
+    late_reader(&mut c, T0_MS + 60_000);
+    ctx("m1.testnet", T0_MS + 70_000, 0);
+    c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }])]);
+}
+
+#[test]
+#[should_panic(expected = "is not an active subscriber with a key")]
+fn sharing_only_to_active_subscribers() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
+    ctx("alice.testnet", T0_MS + 70_000, 0);
+    c.share_signals(vec![(id, vec![WrappedKey { member: acc("stranger.testnet"), key: "w".into() }])]);
+}
+
+#[test]
+#[should_panic(expected = "has ended")]
+fn no_sharing_after_validity() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    late_reader(&mut c, T0_MS + 60_000);
+    ctx("alice.testnet", T0_MS + 10_000 + 60 * 60_000, 0);
+    c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }])]);
+}

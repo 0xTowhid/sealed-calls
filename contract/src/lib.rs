@@ -471,6 +471,47 @@ impl SealedCalls {
         id
     }
 
+    /// Late access: the creator wraps still-sealed signals to subscribers who joined (or set up a
+    /// browser) after posting. Only the creator, only while a signal is sealed and still valid, only
+    /// to active subscribers with a key; a member who already has a wrapped key is skipped. No
+    /// deposit (so a wallet's function-call key can do it in the background): the contract pays
+    /// the small storage. Returns how many keys were added.
+    pub fn share_signals(&mut self, items: Vec<(u64, Vec<WrappedKey>)>) -> u32 {
+        let me = env::predecessor_account_id();
+        let now = env::block_timestamp_ms();
+        assert!(items.len() <= 20, "at most 20 signals per call");
+        let mut added = 0u32;
+        for (id, keys) in items {
+            let (channel, open_at) = {
+                let s = self.signals.get(id as u32).expect("no such signal");
+                assert_eq!(s.creator, me, "only the signal's creator can share it");
+                assert_eq!(s.status, SignalStatus::Sealed, "signal {id} is no longer sealed");
+                (s.channel, opens_at(s))
+            };
+            assert!(now < open_at, "signal {id} has ended; it opens for everyone now");
+            let readers = {
+                let c = self.channels.get(channel).unwrap();
+                self.readers(c, now)
+            };
+            let s = self.signals.get_mut(id as u32).unwrap();
+            let mut new_members = vec![];
+            for w in keys {
+                assert!(readers.contains(&w.member), "{} is not an active subscriber with a key", w.member);
+                assert!(!w.key.is_empty() && w.key.len() <= MAX_WRAPPED_KEY, "wrapped key size");
+                if s.wrapped_keys.iter().any(|x| x.member == w.member) {
+                    continue;
+                }
+                new_members.push(w.member.clone());
+                s.wrapped_keys.push(w);
+                added += 1;
+            }
+            if !new_members.is_empty() {
+                emit("signal_shared", json!({ "signal": id, "channel": channel, "members": new_members }));
+            }
+        }
+        added
+    }
+
     // ---------------------------------------------------------------- subscribers
 
     /// Subscribe (or extend) with one of the channel's plans. Attach the plan price plus about

@@ -134,7 +134,7 @@ function FeedCard({ s, name, now, account, opened, live }: { s: Signal; name: st
           ) : s.wrapped_keys.some((w) => w.member === account) ? (
             <p className="sub0">Decrypting…</p>
           ) : (
-            <p className="sub0">Posted before you subscribed or set up this browser. It opens for you {when(opensAt(s))}.</p>
+            <p className="sub0">Posted before you subscribed or set up this browser. The creator's app shares live signals with new subscribers while it's open; at the latest it opens for you {when(opensAt(s))}.</p>
           )}
         </div>
       </article>
