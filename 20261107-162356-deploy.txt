@@ -1,0 +1,6 @@
+=== deploy  commit 7e437f45afbf6a0791df406da4b2a1fe709b6945  Sat Nov  7 16:24:24 UTC 2026
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm
+[16:25:06] wasm sha256 8499483cacb46b1f2431cfff95d22d354942192c10d97bf46047eff76d5f886a
+Error: 
+[16:25:18] list_calls on club 0: ERROR: view list_calls failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"91rD9m5jTWhvWTHvXUGJ59ANftzzsuAZzi7FQhN4Yv6i","block_height":276655531,"requested_account_id":"app.sealedcalls-tow

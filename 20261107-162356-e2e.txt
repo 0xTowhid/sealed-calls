@@ -1,0 +1,16 @@
+=== e2e  commit 7e437f45afbf6a0791df406da4b2a1fe709b6945  Sat Nov  7 16:25:18 UTC 2026
+[16:25:18] 1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)
+    Error: 
+       0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+       1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29
+  throw new Error(`view ${method} failed: ${last}`);
+        ^
+
+Error: view get_club failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"FknCMs8CRAveRt3iVMWdfQ1rsqPjkCqCDp66CxPhssmJ","block_height":276655539,"requested_account_id":"app.sealedcalls-towhid.testnet"},"name":"UNKNOWN_ACCOUNT"},"code":-32000,"message":"Server error","data":"account app.sealedcalls-towhid.testnet does 
+    at Module.view (file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async [eval]:1:61
+
+Node.js v20.20.2
+[16:25:23] FAIL create_club did not create a club

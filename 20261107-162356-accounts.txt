@@ -1,0 +1,26 @@
+=== accounts  commit 7e437f45afbf6a0791df406da4b2a1fe709b6945  Sat Nov  7 16:23:56 UTC 2026
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+[16:24:06] moved 9.5 NEAR from sealedcalls-towhid-f31116.testnet
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+[16:24:13] moved 9.5 NEAR from sealedcalls-towhid-f31116.testnet
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+Error: 
+   0: [91mCannot sign a transaction due to an error while fetching the most recent nonce value on network <testnet>[0m
+   1: [91mhandler error: [Access key for public key ed25519:3ssGGwoTVdmpA33rUtH5j1sBofNtUmWedBVVLWLcHoJG does not exist while viewing][0m
+[16:24:22] sealedcalls-towhid.testnet: Native account balance           10 NEAR 
+[16:24:23] app.sealedcalls-towhid.testnet: 
+[16:24:23] caller.sealedcalls-towhid.testnet: 
+[16:24:23] m1.sealedcalls-towhid.testnet: 
+[16:24:24] m2.sealedcalls-towhid.testnet: 
