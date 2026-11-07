@@ -1,0 +1,7 @@
+=== keep  commit c7585c93c23853a00666d48316ad919b23940cc5  Sat Nov  7 19:48:10 UTC 2026
+[19:48:13] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[19:48:16] keeper: 1 channel(s) on app.to69.testnet; to69.testnet: Native account balance           4.752873048547839007407414 NEAR 
+[19:48:18] channel 0 signal 0: revealing from drand
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":0,"channel":0,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
+[19:48:22] period 0 has not ended yet (current 0)
+[19:48:22] keeper done
