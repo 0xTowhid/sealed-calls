@@ -14,6 +14,8 @@ on:
   push:
     branches: [main]
     paths: [".github/testnet-request"]
+  schedule:
+    - cron: "17 * * * *"   # hourly keeper: reveal ended signals and settle ended periods
 
 permissions:
   contents: write
@@ -34,6 +36,7 @@ jobs:
         id: act
         run: |
           A="${{ github.event.inputs.actions }}"
+          [ "${{ github.event_name }}" = "schedule" ] && A=keep
           [ -z "$A" ] && A=$(head -1 .github/testnet-request)
           echo "actions=$A" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
@@ -63,8 +66,9 @@ jobs:
           (cd scripts && npm install --silent)
           mkdir -p out; STAMP=$(date -u +%Y%m%d-%H%M%S)
           for a in ${{ steps.act.outputs.actions }}; do
-            echo "=== $a  commit $GITHUB_SHA  $(date -u)" | tee -a "out/$STAMP-$a.txt"
-            bash scripts/testnet.sh "$a" 2>&1 | tee -a "out/$STAMP-$a.txt"
+            F="out/$STAMP-$a.txt"; [ "$a" = keep ] && F="out/keeper-latest.txt"   # the keeper overwrites one file
+            echo "=== $a  commit $GITHUB_SHA  $(date -u)" | tee -a "$F"
+            bash scripts/testnet.sh "$a" 2>&1 | tee -a "$F"
           done
       - name: publish log
         if: always()

@@ -7,6 +7,7 @@
 #              channel -> subscribe -> sealed BTC signal -> member reads -> drand reveal ->
 #              settle via OutLayer -> release or refund claim. ~35 minutes.
 #   settle   : reveal sealed signals of channel $CH (default 0) on app.<main> from drand, then settle
+#   keep     : hourly keeper: reveal ended signals, mark unopened ones after grace, settle ended periods
 #   status   : balances, config and channels on app.<main>
 # Env: MAIN, PUBKEY, SK (private key), SCORER_URL, SCORER_HASH
 set -uo pipefail
@@ -59,6 +60,28 @@ reveal_all() {
       call "$M2" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0 NEAR'
     fi
   done
+}
+
+# Keeper pass for channel $2 on $1: reveal every ended signal drand can open (no waiting), mark
+# signals still unopened after the grace period, then settle every ended period.
+keep_channel() {
+  local C=$1 CH=$2 NOW GRACE
+  NOW=$(date +%s); GRACE=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).grace_min*60))")
+  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
+  for ID in $(js "const now=$NOW*1000;for (const s of require('/tmp/sigs.json')) if (s.status==='Sealed' && now>=s.posted_at_ms+s.valid_min*60000 && now>=(1692803367+(s.reveal_round-1)*3+5)*1000) console.log(s.id)"); do
+    js "require('fs').writeFileSync('/tmp/s.json',JSON.stringify(require('/tmp/sigs.json').find(s=>s.id==$ID)))"
+    if OPENED=$(node sc.mjs tlock-open /tmp/s.json 2>/dev/null) && echo "$OPENED" | grep -q '"matches":true'; then
+      log "channel $CH signal $ID: revealing from drand"
+      PT=$(js "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
+      call "$MAIN" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
+    elif [ "$NOW" -ge "$(js "const s=require('/tmp/s.json');console.log(Math.ceil((s.posted_at_ms+s.valid_min*60000)/1000)+$GRACE)")" ]; then
+      log "channel $CH signal $ID: drand copy doesn't open and grace is over -> mark_unrevealed"
+      call "$MAIN" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
+    else
+      log "channel $CH signal $ID: ended but its drand copy doesn't open; waiting for the grace period"
+    fi
+  done
+  settle_ready "$C" "$CH" || log "channel $CH: settlement not finished this round"
 }
 
 # Settle periods of channel $2 on $1 until none is ready; prints results.
@@ -180,6 +203,14 @@ e2e)
   log "7. $M1 can claim back: $CL"
   if echo "$CL" | grep -qE '^\["[1-9]'; then call "$M1" "$C" claim_refund '{"channel":0}' '0 NEAR'; fi
   log "E2E PASS"
+  ;;
+
+keep)  # hourly keeper (scheduled workflow): every channel on app.<main>
+  C=$APP
+  N=$(view list_channels '{"limit":100}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).length))")
+  log "keeper: $N channel(s) on $C; $MAIN: $(bal "$MAIN")"
+  for CH in $(seq 0 $((N - 1))); do keep_channel "$C" "$CH"; done
+  log "keeper done"
   ;;
 
 settle)
