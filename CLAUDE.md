@@ -86,6 +86,7 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 - Scorer v2 (12 tests) live-tested in CI on Hyperliquid + GeckoTerminal.
 - **v2 e2e PASS on testnet (19:03 UTC Nov 7)**, throwaway contract e2e071842.to69.testnet: channel → 2 subscribers (50/50 split events) → sealed BTC 5x long → m1 decrypts, hash matches → early tlock/reveal refused → drand reveal → settle → OutLayer request 12482 success (1.4 s) → r −48 bps "expired", fill 75816, exit 75812, cost 45 bps → period not released → m1 claimed refund. Log on `testnet-results`.
 - Web v2 built from the approved mockups (Explore, Channel, Creator desk, Feed); `?viewas=<account>` gives a read-only preview. Pages deploys from main.
+- **Late access (option A, user chose Nov 8 01:12):** `share_signals(items)` (creator only, sealed + still valid, active subscribers with a key, no deposit so the wallet's function-call key works silently). Web derives each signal key as HMAC(creator secret in localStorage, "sealed-calls v2 signal|"+commit); the desk re-shares every 30 s while open; key backup/restore on the desk. Contract upgraded in place 19:16 UTC Nov 7 (34 tests). Signals posted before this (random keys) can't be re-shared. Options B (bot) / C (OutLayer TEE key escrow) not built.
 - testnet.sh actions: accounts, wipe-app, delete=<acct>, deploy, e2e, settle (CH=n), status. Small calls use 100 Tgas (members hold ~0.5 NEAR).
 
 ## Gate results (Nov 7)
