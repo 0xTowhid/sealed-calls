@@ -10,13 +10,14 @@ set -uo pipefail
 cd "$(dirname "$0")"
 APP="app.$MAIN"; CALLER="caller.$MAIN"; M1="m1.$MAIN"; M2="m2.$MAIN"
 BONK="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
-SIGN=(sign-with-plaintext-private-key --signer-public-key "$PUBKEY" --signer-private-key "$SK" send)
+# near-cli-rs (Nov 2026): the private key is positional; --signer-public-key was removed.
+SIGN=(sign-with-plaintext-private-key "$SK" send)
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 exists() { near account view-account-summary "$1" network-config testnet now >/dev/null 2>&1; }
 bal() { near account view-account-summary "$1" network-config testnet now 2>&1 | grep -oE "Native account balance[^│]*" | head -1; }
 call() { # signer contract method json deposit
   near contract call-function as-transaction "$2" "$3" json-args "$4" prepaid-gas '300.0 Tgas' attached-deposit "$5" sign-as "$1" network-config testnet "${SIGN[@]}" 2>&1 \
-    | grep -E "Transaction ID|EVENT_JSON|Error|error|panicked|Smart contract panicked|Function execution return value" | sed 's/^/    /'
+    | grep -iE "Transaction ID|EVENT_JSON|error|panicked|return value" | head -12 | sed 's/^/    /'
 }
 view() { node sc.mjs view "$APP" "$1" "$2"; }
 wait_until() { local t=$1; while [ "$(date +%s)" -lt "$t" ]; do sleep 10; done; }
@@ -25,14 +26,17 @@ case "$1" in
 accounts)
   exists "$MAIN" || near account create-account sponsor-by-faucet-service "$MAIN" use-manually-provided-public-key "$PUBKEY" network-config testnet create
   FUND="sealedcalls-towhid-f$(date +%j%H).testnet"   # one funder per hour; the faucet gives ~10 NEAR each
-  if near account create-account sponsor-by-faucet-service "$FUND" use-manually-provided-public-key "$PUBKEY" network-config testnet create >/dev/null 2>&1; then
-    sleep 5; near tokens "$FUND" send-near "$MAIN" '9.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error" ; log "topped up from $FUND"
-  else log "funder faucet unavailable (rate limit?)"; fi
+  exists "$FUND" || near account create-account sponsor-by-faucet-service "$FUND" use-manually-provided-public-key "$PUBKEY" network-config testnet create >/dev/null 2>&1 || log "funder faucet unavailable"
+  for f in "$FUND" "sealedcalls-towhid-f31116.testnet"; do   # also drain the funder from the first run
+    if exists "$f" && bal "$f" | grep -qE "balance +[1-9][0-9]*(\.[0-9]+)? NEAR"; then
+      sleep 3; near tokens "$f" send-near "$MAIN" '9.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error" | head -3; log "moved 9.5 NEAR from $f"
+    fi
+  done
   sleep 5
   for spec in "$APP:5" "$CALLER:1" "$M1:0.5" "$M2:0.5"; do
     a="${spec%%:*}"; amt="${spec##*:} NEAR"
     if exists "$a"; then log "$a exists"; continue; fi
-    near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error|created"
+    near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
   done
   for a in "$MAIN" "$APP" "$CALLER" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
   ;;
@@ -62,6 +66,7 @@ J
   log "1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)"
   call "$MAIN" "$APP" create_club "$CFG" '2 NEAR'
   CLUB=$(node -e "import('./sc.mjs').then(async m=>{for(let i=0;;i++){const c=await m.view('$APP','get_club',{club:i});if(!c){console.log(i-1);break}}})")
+  [[ "$CLUB" =~ ^[0-9]+$ ]] || { log "FAIL create_club did not create a club"; exit 1; }
   log "   club id: $CLUB"; START=$(date +%s)
   # 2. Member registers an X25519 key.
   PUB=$(node sc.mjs member-keygen /tmp/m1.key)
