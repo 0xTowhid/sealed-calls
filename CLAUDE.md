@@ -67,6 +67,18 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 - **Never put a mainnet key in GitHub secrets.** The user's mainnet account is `to69.near`; mainnet is out of scope and, if ever done, runs from a key that is not stored on GitHub.
 - Old generated accounts `sealedcalls-towhid.testnet` (+ app/caller/m2 sub-accounts) are abandoned test leftovers.
 
+## Gate results (Nov 7)
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| (a) tlock | PASS | CI: sealed to a future round, refused early, opened at the round; 694–792 byte ciphertext |
+| (d) prices | PASS | GeckoTerminal pools have `pool_created_at`; empty minutes are **omitted**; 72 h history works; free API rate-limits after ~8 fast calls (scorer paces + retries); Jupiter lite-api quote works |
+| (b) contract → OutLayer → callback | **PASS** | testnet e2e 16:34–16:50 UTC: club 1 on app.sealedcalls-towhid.testnet, call 0 BONK, member decrypt OK, early reveal rejected, drand reveal OK, settle → OutLayer request 12291 success (9.6 s, 0.0021 NEAR charged, rest refunded) → score −147 bps "median", paid 0 |
+| (c) Sputnik DAO | not run yet | |
+
+Fallbacks for (a), (b), (d) are no longer needed. near-sdk 5.30 wasm deploys fine.
+near-cli-rs (Nov 2026): `sign-with-plaintext-private-key <PRIVATE_KEY> send` (positional; `--signer-public-key` was removed; its README is outdated).
+
 ## Status (Nov 7, evening)
 
 - Work continues in the claude.ai cloud session. Its sandbox reaches GitHub only, so all network work (gates, wasm builds, deploys) runs in GitHub Actions (`.github/workflows/ci.yml`); results are pushed to the `results` branch, the built scorer wasm to the `dist` branch.
