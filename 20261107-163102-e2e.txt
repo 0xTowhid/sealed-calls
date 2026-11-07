@@ -1,0 +1,7 @@
+=== e2e  commit 3df96e6c4f24b8f4eac93dc77a28f87b11fa735a  Sat Nov  7 16:32:30 UTC 2026
+[16:32:30] 1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)
+    │    Transaction ID: 68guuBbCNxLeSPfTfun4FUd1EzXYAMn8Z3pn29wvbhqK
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"club_created","data":[{"club":0,"governor":"sealedcalls-towhid.testnet","escrow":"1995570000000000000000000"}]}
+    Function execution return value (printed to stdout):
+0
+[16:32:35] FAIL create_club did not create a club

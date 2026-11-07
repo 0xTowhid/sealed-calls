@@ -1,0 +1,16 @@
+=== accounts  commit 3df96e6c4f24b8f4eac93dc77a28f87b11fa735a  Sat Nov  7 16:31:02 UTC 2026
+│    Transaction ID: J2YhBkDKwQVE9xHy6jjQX75jr7UGCcSgh5uAXYfjWxCW
+[16:31:14] moved 9.5 NEAR from sealedcalls-towhid-f31116.testnet
+│    Transaction ID: 7pj1k4y1pReNjQ8EWKvzUrZKS7QkN4KcqeURccewWPJ1
+New account <app.sealedcalls-towhid.testnet> has been successfully created.
+│    Transaction ID: 5YWS45CcFThqUPQxvVP3HFvJ26wZbLhX1tDFrChSBtmn
+New account <caller.sealedcalls-towhid.testnet> has been successfully created.
+Error: 
+   0: [91mError: Transaction has expired.[0m
+│    Transaction ID: 6LETthNKjqzd9nY47wjhrandnKvUyGGZyeWqZnR7KnuX
+New account <m2.sealedcalls-towhid.testnet> has been successfully created.
+[16:31:34] sealedcalls-towhid.testnet: Native account balance           12.9786550313875 NEAR 
+[16:31:35] app.sealedcalls-towhid.testnet: Native account balance           5 NEAR 
+[16:31:36] caller.sealedcalls-towhid.testnet: Native account balance             1 NEAR 
+[16:31:37] m1.sealedcalls-towhid.testnet: 
+[16:31:37] m2.sealedcalls-towhid.testnet: Native account balance           0.5 NEAR 

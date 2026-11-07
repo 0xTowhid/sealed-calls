@@ -1,0 +1,6 @@
+=== deploy  commit 3df96e6c4f24b8f4eac93dc77a28f87b11fa735a  Sat Nov  7 16:31:37 UTC 2026
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm
+[16:32:18] wasm sha256 e5611ce626e36983a2ce7738cf7b7ee3660249eda5e01dc5327f2f2e0bdcb5bc
+│    Transaction ID: 6fyMqJ7AS2VeN9sp1f1x4RTDh3GmNFYkF7juFCwX1dct
+[16:32:30] list_calls on club 0: []
