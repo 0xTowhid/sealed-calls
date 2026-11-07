@@ -80,6 +80,14 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 - **Never put a mainnet key in GitHub secrets.** The user's mainnet account is `to69.near`; mainnet is out of scope and, if ever done, runs from a key that is not stored on GitHub.
 - Old generated accounts `sealedcalls-towhid.testnet` (+ app/caller/m2 sub-accounts) are abandoned test leftovers.
 
+## v2 status (Nov 8, 01:05 Dhaka)
+
+- Contract v2 (30 tests) deployed fresh at `app.to69.testnet` with period_minutes 1440 (daily; README says weekly in production). v1 state was deleted.
+- Scorer v2 (12 tests) live-tested in CI on Hyperliquid + GeckoTerminal.
+- **v2 e2e PASS on testnet (19:03 UTC Nov 7)**, throwaway contract e2e071842.to69.testnet: channel → 2 subscribers (50/50 split events) → sealed BTC 5x long → m1 decrypts, hash matches → early tlock/reveal refused → drand reveal → settle → OutLayer request 12482 success (1.4 s) → r −48 bps "expired", fill 75816, exit 75812, cost 45 bps → period not released → m1 claimed refund. Log on `testnet-results`.
+- Web v2 built from the approved mockups (Explore, Channel, Creator desk, Feed); `?viewas=<account>` gives a read-only preview. Pages deploys from main.
+- testnet.sh actions: accounts, wipe-app, delete=<acct>, deploy, e2e, settle (CH=n), status. Small calls use 100 Tgas (members hold ~0.5 NEAR).
+
 ## Gate results (Nov 7)
 
 | Gate | Result | Evidence |
