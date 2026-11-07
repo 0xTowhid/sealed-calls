@@ -4,6 +4,7 @@
 #   deploy   : deploy/upgrade the contract at app.<main>
 #   e2e      : the full loop on a fresh test club: post a sealed BONK call -> member decrypts ->
 #              anyone reveals via drand -> settle via OutLayer -> payout. ~20 minutes.
+#   settle   : reveal any sealed calls of club $CLUB (default 0) from drand, then settle epoch $EPOCH (default 0)
 #   status   : balances and club 0
 # Env: MAIN, PUBKEY, SK (private key), SCORER_URL, SCORER_HASH (e2e)
 set -uo pipefail
@@ -119,6 +120,38 @@ J
   log "   call after scoring: $(view get_call "{\"call_id\":$ID}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(JSON.stringify({score_bps:c.score_bps,note:c.note}))})")"
   log "   caller balance after: $(bal "$CALLER")"
   echo "$E" | grep -q '"Settled"' && log "E2E PASS" || log "E2E FAIL at settle"
+  ;;
+
+settle)
+  # Finish an epoch of club ${CLUB:-0}: reveal every sealed call from drand (anyone may), then settle.
+  CLUB=${CLUB:-0}; EP=${EPOCH:-0}
+  view list_calls "{\"club\":$CLUB,\"limit\":50}" > /tmp/calls.json
+  node -e "for (const c of require('/tmp/calls.json')) console.log(JSON.stringify({id:c.id,epoch:c.epoch,caller:c.caller,posted:new Date(c.posted_at_ms).toISOString(),horizon_min:c.horizon_min,status:c.status,score_bps:c.score_bps,note:c.note}))"
+  for ID in $(node -e "for (const c of require('/tmp/calls.json')) if (c.epoch==$EP && c.status==='Sealed') console.log(c.id)"); do
+    node -e "const c=require('/tmp/calls.json').find(c=>c.id==$ID);require('fs').writeFileSync('/tmp/c.json',JSON.stringify(c))"
+    if OPENED=$(node sc.mjs tlock-open /tmp/c.json 2>/dev/null); then
+      log "call $ID opened from drand: $OPENED"
+      PT=$(node -e "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
+      call "$M2" "$APP" reveal "{\"call_id\":$ID,\"plaintext\":$PT}" '0 NEAR'
+    else
+      log "call $ID cannot be opened yet; trying mark_unrevealed (works after the grace period)"
+      call "$M2" "$APP" mark_unrevealed "{\"call_id\":$ID}" '0 NEAR'
+    fi
+  done
+  sleep 3
+  log "settle club $CLUB epoch $EP via OutLayer (caller balance before: $(bal "$CALLER"))"
+  call "$MAIN" "$APP" settle "{\"club\":$CLUB,\"epoch\":$EP}" '0.5 NEAR'
+  E=null
+  for i in $(seq 1 30); do
+    E=$(view get_epoch "{\"club\":$CLUB,\"epoch\":$EP}")
+    echo "$E" | grep -q '"Settled"' && break
+    [ "$E" = "null" ] && [ "$i" -gt 2 ] && { log "   epoch reset: scoring failed"; break; }
+    sleep 10
+  done
+  log "   epoch result: $E"
+  view list_calls "{\"club\":$CLUB,\"limit\":50}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const c of JSON.parse(s))console.log(JSON.stringify({id:c.id,status:c.status,score_bps:c.score_bps,note:c.note,entry_usd:c.entry_usd,exit_usd:c.exit_usd,cost_bps:c.cost_bps}))})"
+  log "   caller balance after: $(bal "$CALLER")"
+  echo "$E" | grep -q '"Settled"' && log "SETTLE PASS" || log "SETTLE FAIL"
   ;;
 
 status)
