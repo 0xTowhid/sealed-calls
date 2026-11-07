@@ -17,13 +17,13 @@ SIGN=(sign-with-plaintext-private-key "$SK" send)
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 exists() { near account view-account-summary "$1" network-config testnet now >/dev/null 2>&1; }
 bal() { near account view-account-summary "$1" network-config testnet now 2>&1 | grep -oE "Native account balance[^│]*" | head -1; }
-call() { # signer contract method json deposit
-  near contract call-function as-transaction "$2" "$3" json-args "$4" prepaid-gas '300.0 Tgas' attached-deposit "$5" sign-as "$1" network-config testnet "${SIGN[@]}" 2>&1 \
+call() { # signer contract method json deposit [gas Tgas, default 100]
+  near contract call-function as-transaction "$2" "$3" json-args "$4" prepaid-gas "${6:-100}.0 Tgas" attached-deposit "$5" sign-as "$1" network-config testnet "${SIGN[@]}" 2>&1 \
     | grep -iE "Transaction ID|EVENT_JSON|error|panicked|return value" | head -12 | sed 's/^/    /'
 }
 view() { node sc.mjs view "$C" "$1" "$2"; }
 wait_until() { local t=$1; while [ "$(date +%s)" -lt "$t" ]; do sleep 10; done; }
-js() { node -e "$1"; }
+js() { node -e "$1" "${@:2}"; }
 WASM=../contract/target/near/sealed_calls.wasm
 build() { (cd ../contract && cargo near build non-reproducible-wasm --no-embed-abi 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
 config_json() { # period_minutes
@@ -69,7 +69,7 @@ settle_ready() {
     local CUR; CUR=$(view current_period "{\"channel\":$CH}")
     [ "$NP" -lt "$CUR" ] || { log "period $NP has not ended yet (current $CUR)"; break; }
     log "settle channel $CH period $NP (held $(view period_held "{\"channel\":$CH,\"period\":$NP}"))"
-    call "$M2" "$C" settle "{\"channel\":$CH}" '0.5 NEAR'
+    call "$MAIN" "$C" settle "{\"channel\":$CH}" '0.5 NEAR' 300
     local R=null
     for i in $(seq 1 30); do
       R=$(view get_period "{\"channel\":$CH,\"period\":$NP}")
@@ -136,9 +136,10 @@ e2e)
   : "${SCORER_URL:?}" "${SCORER_HASH:?}"
   [ "$(curl -sL "$SCORER_URL" | sha256sum | cut -d' ' -f1)" = "$SCORER_HASH" ] || { log "FAIL scorer URL bytes do not match hash"; exit 1; }
   C="e2e$(date -u +%d%H%M).$MAIN"
-  log "0. throwaway contract $C with a 20-minute period"
-  near account create-account fund-myself "$C" '3.9 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|created" | head -3
   build
+  NEED=$(js "console.log((Math.ceil(require('fs').statSync('$WASM').size/1e4)/10+0.25).toFixed(2))")
+  log "0. throwaway contract $C with a 20-minute period ($NEED NEAR for storage; $MAIN has $(bal "$MAIN"))"
+  near account create-account fund-myself "$C" "$NEED NEAR" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|created" | head -3
   near contract deploy "$C" use-file "$WASM" with-init-call new json-args "$(config_json 20)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Error"
   sleep 3; view get_config '{}' >/dev/null || { log "FAIL deploy"; exit 1; }
   cleanup() { log "deleting $C (NEAR back to $MAIN)"; near account delete-account "$C" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2; }
@@ -159,7 +160,7 @@ e2e)
   READERS=$(view readers_now '{"channel":0}')
   log "3. seal + post a BTC long (valid 15 min) for readers $READERS: $SIG"
   node sc.mjs seal 0 "$MAIN" "$SIG" 15 "$READERS" /tmp/post.json
-  call "$MAIN" "$C" post_signal "$(cat /tmp/post.json)" '0.1 NEAR'
+  call "$MAIN" "$C" post_signal "$(cat /tmp/post.json)" '0.1 NEAR' 200
   sleep 3; view get_signal '{"signal_id":0}' > /tmp/s0.json || { log "FAIL no signal"; exit 1; }
   log "4. member reads it now: $(node sc.mjs member-open /tmp/s0.json "$M1" /tmp/m1.key)"
   log "   public tlock-open now (must fail): $(node sc.mjs tlock-open /tmp/s0.json 2>&1 | head -c 120)"
