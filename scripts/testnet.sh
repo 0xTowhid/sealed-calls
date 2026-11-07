@@ -129,6 +129,8 @@ settle)
   node -e "for (const c of require('/tmp/calls.json')) console.log(JSON.stringify({id:c.id,epoch:c.epoch,caller:c.caller,posted:new Date(c.posted_at_ms).toISOString(),horizon_min:c.horizon_min,status:c.status,score_bps:c.score_bps,note:c.note}))"
   for ID in $(node -e "for (const c of require('/tmp/calls.json')) if (c.epoch==$EP && c.status==='Sealed') console.log(c.id)"); do
     node -e "const c=require('/tmp/calls.json').find(c=>c.id==$ID);require('fs').writeFileSync('/tmp/c.json',JSON.stringify(c))"
+    RT=$(node -e "const c=require('/tmp/c.json');console.log(1692803367+(c.reveal_round-1)*3+10)")
+    if [ "$RT" -gt "$(date +%s)" ] && [ $((RT - $(date +%s))) -lt 1500 ]; then log "call $ID: waiting $(( RT - $(date +%s) ))s for drand round $(node -e "console.log(require('/tmp/c.json').reveal_round)")"; wait_until "$RT"; fi
     if OPENED=$(node sc.mjs tlock-open /tmp/c.json 2>/dev/null); then
       log "call $ID opened from drand: $OPENED"
       PT=$(node -e "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
