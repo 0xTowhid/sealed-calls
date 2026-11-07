@@ -1,0 +1,24 @@
+action: accounts  commit: 2993f96886782b281e066b61be58d9c27a7751b4  time: Sat Nov  7 16:05:47 UTC 2026
+├  Your transaction:
+│    signer_id:    testnet
+│    actions:
+│       -- create account:      sealedcalls-towhid.testnet
+│       -- add access key:     
+│                       public key:   ed25519:5pqFBSTaFibpsbjfVY1xP9FTSxRyCTBopo2eWxkKXpHr
+│                       permission:   FullAccess
+│     [0m
+├  Transaction Execution Info:
+│    Transaction ID: 9sotGq2RCrRMZLDtU7RTa5yEansmqVcx75P8Ag74s8S5
+│    To see the transaction in the transaction explorer, please open this url in your browser:
+│    https://explorer.testnet.near.org/transactions/9sotGq2RCrRMZLDtU7RTa5yEansmqVcx75P8Ag74s8S5
+[0m
+New account <sealedcalls-towhid.testnet> created successfully.
+
+
+
+Here is your console command if you need to script it or re-run:
+    [33mnear account create-account sponsor-by-faucet-service sealedcalls-towhid.testnet use-manually-provided-public-key ed25519:5pqFBSTaFibpsbjfVY1xP9FTSxRyCTBopo2eWxkKXpHr network-config testnet create[39m
+
+Error: 
+   1: [91mhandler error: [account sealedcalls-towhid.testnet does not exist while viewing][0m
+NEAR_PRIVATE_KEY secret not set: sub-accounts skipped
