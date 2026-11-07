@@ -60,7 +60,14 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 | Function-call keys / gas keys (NEP-611) | keeper for reveal/settle | |
 | drand quicknet + tlock-js 0.9.0 | sealing | `mainnetClient()` is pinned to quicknet (chain hash 52db9ba7…), 3 s rounds, 12-of-22 threshold |
 
-## Status at handoff
+## Status (Nov 7, evening)
+
+- Work continues in the claude.ai cloud session. Its sandbox reaches GitHub only, so all network work (gates, wasm builds, deploys) runs in GitHub Actions (`.github/workflows/ci.yml`); results are pushed to the `results` branch, the built scorer wasm to the `dist` branch.
+- `contract/`: main contract written (clubs, roster/members by governor, member X25519 keys, post_call with drand-round and wrapped-key checks, daily limit, reveal bound to club+caller+horizon, mark_unrevealed, settle → OutLayer → on_scores, duplicate rule, shrunk score, budget split, NEP-297 events). 20 unit tests pass.
+- Design change found while building: the token is sealed at posting, so "one open call per token" is enforced at settle (later duplicate scores −100%), not rejected at posting.
+- `scorer/`: OutLayer job implementing the scoring rules against GeckoTerminal; 8 unit tests pass on the pure rules; the live run is in CI (`scorer-live`).
+
+## Status at handoff (Nov 6)
 
 - `gates/` written; **none of the network gates have been run yet** (the planning sandbox had no outbound network). Verified there: probe contract unit tests pass (3/3); candle job type-checks; scripts parse.
 - Gate kit: (a) `gates/01-tlock` tlock round-trip; (d) `gates/04-prices` GeckoTerminal pool/candle/history + gap behaviour + optional Jupiter; (b) `gates/02-outlayer` probe contract → OutLayer → callback (the riskiest); (c) `gates/03-sputnik` create DAO + FunctionCall proposal. Run order: a, d, b, c. See README.

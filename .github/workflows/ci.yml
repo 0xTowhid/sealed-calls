@@ -1,0 +1,131 @@
+name: ci
+
+# Runs on every push. Results land on the `results` branch (results/*.txt) and the built
+# scorer wasm on the `dist` branch (its raw URL is what OutLayer runs).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "contract\nscorer" }
+      - run: mkdir -p results
+      - name: contract tests
+        run: (cd contract && cargo test 2>&1) | tee results/unit-contract.txt
+      - name: scorer tests
+        run: (cd scorer && cargo test --lib 2>&1) | tee results/unit-scorer.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: r-unit, path: results }
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "wasm32-unknown-unknown,wasm32-wasip2" }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "contract\nscorer" }
+      - name: install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - run: mkdir -p results dist
+      - name: build contract
+        run: |
+          (cd contract && cargo near build non-reproducible-wasm 2>&1) | tail -20 | tee results/build-contract.txt
+          cp contract/target/near/sealed_calls.wasm dist/
+      - name: build scorer (wasm32-wasip2)
+        run: |
+          (cd scorer && cargo build --target wasm32-wasip2 --release 2>&1) | tail -5 | tee results/build-scorer.txt
+          cp scorer/target/wasm32-wasip2/release/scorer.wasm dist/
+          (cd dist && sha256sum *.wasm | tee ../results/wasm-sha256.txt && ls -l *.wasm | tee -a ../results/wasm-sha256.txt)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: r-build, path: results }
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist }
+
+  # Runs the real scorer against live GeckoTerminal for calls posted 2 hours ago.
+  scorer-live:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - name: install wasmtime
+        run: curl https://wasmtime.dev/install.sh -sSf | bash
+      - name: score sample calls
+        run: |
+          mkdir -p results
+          NOW=$(($(date +%s)*1000)); POSTED=$((NOW - 2*3600*1000))
+          INPUT="{\"calls\":[{\"id\":1,\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"posted_at_ms\":$POSTED,\"horizon_min\":60},{\"id\":2,\"mint\":\"EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm\",\"posted_at_ms\":$POSTED,\"horizon_min\":60},{\"id\":3,\"mint\":\"11111111111111111111111111111111\",\"posted_at_ms\":$POSTED,\"horizon_min\":60}],\"reference_usd\":500,\"liquidity_floor_usd\":100000}"
+          echo "input: $INPUT" | tee results/scorer-live.txt
+          echo "$INPUT" | ~/.wasmtime/bin/wasmtime run -S http dist/scorer.wasm 2>&1 | tee -a results/scorer-live.txt
+          echo | tee -a results/scorer-live.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: r-scorer-live, path: results }
+
+  gate-a-tlock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: mkdir -p results
+      - run: (cd gates/01-tlock && npm install --silent && timeout 180 node tlock-roundtrip.mjs 2>&1) | tee results/gate-a.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: r-gate-a, path: results }
+
+  gate-d-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: mkdir -p results
+      - run: timeout 300 node gates/04-prices/fetch-candles.mjs 2>&1 | tee results/gate-d.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: r-gate-d, path: results }
+
+  report:
+    needs: [unit-tests, build, scorer-live, gate-a-tlock, gate-d-prices]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: "r-*", path: all, merge-multiple: true }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: dist, path: dist }
+      - name: publish results and dist branches
+        run: |
+          git config --global user.name "sealed-calls-ci"
+          git config --global user.email "ci@users.noreply.github.com"
+          REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          {
+            echo "commit: ${{ github.sha }}"
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "unit-tests: ${{ needs.unit-tests.result }}"
+            echo "build: ${{ needs.build.result }}"
+            echo "scorer-live: ${{ needs.scorer-live.result }}"
+            echo "gate-a-tlock: ${{ needs.gate-a-tlock.result }}"
+            echo "gate-d-prices: ${{ needs.gate-d-prices.result }}"
+          } > all/SUMMARY.txt
+          publish() { # branch, source dir
+            rm -rf pub && mkdir pub && cp -r "$2"/. pub/ && cd pub
+            git init -q -b "$1" && git add -A && git commit -q -m "$1 for ${{ github.sha }}" && git push -q -f "$REPO" "$1"
+            cd ..
+          }
+          publish results all
+          if [ -f dist/scorer.wasm ]; then publish dist dist; fi
