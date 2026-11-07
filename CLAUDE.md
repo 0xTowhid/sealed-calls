@@ -14,7 +14,20 @@ Handoff from the claude.ai planning session (Nov 6, 2026). Read this first; it r
 - **UI work: show a concept image or mockup first and get approval before building any UI code.** The user has asked for this repeatedly.
 - Prefer free, keyless, open-source dependencies.
 
-## The locked MVP
+## v2 scope (user decision, Nov 8 00:00 Dhaka) — SUPERSEDES the locked MVP below where they differ
+
+The user reviewed the working v1 and asked for a general signal product (like Telegram signal groups). Decisions:
+
+- **Anyone is a creator.** A creator runs a channel (one caller = the creator) and sets subscription plans: price per duration (1w / 2w / 1m / 6m / 12m, creator-chosen prices).
+- **Subscriptions are time-limited.** Paying a plan extends `until`. Signals are wrapped only to members active at posting.
+- **Money (option 3, chosen by the user):** 50% of every subscription goes to the creator immediately; 50% is spread over the periods (weeks) the subscription covers and held. When a period settles: creator's record for that period positive (S = Σr/(n+5) > 0, at least `min_signals`) → creator gets that period's held half; otherwise (or no signals) members claim it back.
+- **Signals:** any token. Ticker search → user picks exact market. Fields: direction long/short, entry range low–high, TP1–TP3, SL, validity (free, 15 min – 30 days), optional message ≤280 chars. All sealed until validity ends.
+- **Markets:** Hyperliquid (perps/majors; long or short; fees only) and GeckoTerminal any network (DEX tokens; long only; $100k liquidity floor; $500 price impact).
+- **Scoring:** fill = first 1-minute close inside the entry range during validity; never filled → 0% ("not filled"), still counts. TP/SL trigger on 1-minute closes (not wicks); multiple TPs close equal parts; SL closes the rest; otherwise exit at validity end. The entry can fill at any time during validity ("1-minute" is only the candle size the scorer checks). **Leverage is chosen by the creator per signal** (Hyperliquid markets 1–50x; DEX tokens 1x only): result = leveraged return; liquidation if a 1-minute low (long) / high (short) crosses the liquidation price ≈ entry·(1 ∓ 1/lev) → −100%. Clip −100%…+300%. Invalid revealed payload → −100%. Unrevealed after grace → −100%.
+- Dropped from v1: fixed horizon list, Solana-only, long-only, no TP/SL, club roster/DAO-funded escrow, duplicate rule. Sputnik DAO is no longer on the critical path.
+- Plan: contract Nov 8; scorer Nov 9; UI Nov 10–11 (mockups first); live with real signals Nov 12; video + submit Nov 13–14.
+
+## The locked MVP (v1, superseded where v2 differs)
 
 **Mechanic:** a club's paid memecoin calls become a complete public record after each call ends, scored on what a $500 trade would roughly have returned; the caller is paid from the club's escrow only when that record is positive.
 
