@@ -1,0 +1,21 @@
+action: status  commit: 8a5de1e41dbd4e6cfce86fa7e9dedeee5f11c8e9  time: Sat Nov  7 16:09:16 UTC 2026
+sealedcalls-towhid.testnet:  Native account balance           10 NEAR 
+app.sealedcalls-towhid.testnet: Error: 
+   1: [91mhandler error: [account app.sealedcalls-towhid.testnet does not exist while viewing][0m
+caller.sealedcalls-towhid.testnet: Error: 
+   1: [91mhandler error: [account caller.sealedcalls-towhid.testnet does not exist while viewing][0m
+m1.sealedcalls-towhid.testnet: Error: 
+   1: [91mhandler error: [account m1.sealedcalls-towhid.testnet does not exist while viewing][0m
+m2.sealedcalls-towhid.testnet: Error: 
+   1: [91mhandler error: [account m2.sealedcalls-towhid.testnet does not exist while viewing][0m
+
+Here is your console command if you need to script it or re-run:
+    [33mnear contract call-function as-read-only app.sealedcalls-towhid.testnet get_club json-args '{"club":0}' network-config testnet now[39m
+
+Error: 
+   0: [91mFailed to fetch query for read-only function call: 'get_club' (contract <app.sealedcalls-towhid.testnet> on network <testnet>)[0m
+   1: [91mRead-only function execution failed[0m
+   2: [91mhandler error: [account app.sealedcalls-towhid.testnet does not exist while viewing][0m
+
+Location:
+   [35msrc/common.rs[0m:[35m3511[0m
