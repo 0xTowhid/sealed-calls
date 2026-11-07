@@ -4,7 +4,7 @@ import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
-import { CONTRACT, NETWORK, RPCS, GAS_300 } from "./config";
+import { CONTRACT, NETWORK, RPCS, GAS_50 } from "./config";
 import type { Channel, Config, Member, PeriodResult, Signal } from "./types";
 
 const enc = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
@@ -77,7 +77,7 @@ export async function accountId(): Promise<string | null> {
 }
 
 /** Calls a contract method from the signed-in account. Returns the transaction hash when the wallet gives one. */
-export async function call(method: string, args: object, deposit = "0", gas = GAS_300): Promise<string | null> {
+export async function call(method: string, args: object, deposit = "0", gas = GAS_50): Promise<string | null> {
   const s = await wallet();
   if (!s.isSignedIn()) throw new Error("Connect a wallet first.");
   const w = await s.wallet();

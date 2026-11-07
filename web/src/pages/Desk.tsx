@@ -5,7 +5,7 @@ import { dur, near, pct, periodWord, planName, price, sig, when } from "../forma
 import { seal } from "../crypto";
 import { priceOf, searchMarkets, type Found } from "../markets";
 import { Act, SignalFace } from "../ui";
-import { HL_TAKER_FEE, NEAR } from "../config";
+import { GAS_100, HL_TAKER_FEE, NEAR } from "../config";
 import type { Channel, SignalBody } from "../types";
 
 async function load(account: string) {
@@ -164,7 +164,7 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
     if (!body || problem) return;
     const rs = await readersNow(ch.id);
     const { args } = await seal({ channel: ch.id, creator: account, validMin, signal: body, readers: rs.map(([member, pubkey]) => ({ member, pubkey })) });
-    await call("post_signal", args, NEAR(0.1));
+    await call("post_signal", args, NEAR(0.1), GAS_100);
     setPosted(`Posted. ${rs.length} subscriber${rs.length === 1 ? "" : "s"} can read it now; it opens for everyone ${when(Date.now() + validMin * 60_000)}.`);
     setSel(null); setQ(""); setFound([]); setLo(""); setHi(""); setTps(["", "", ""]); setSl(""); setMsg("");
   };

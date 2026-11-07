@@ -5,7 +5,7 @@ import { day, dur, near, nearNum, pct, periodWord, planName, price, when } from 
 import { tlockOpen, roundTimeMs } from "../crypto";
 import { Act, Outcome, Result, SideTag } from "../ui";
 import { venueLabel } from "../markets";
-import { NEAR } from "../config";
+import { GAS_300, NEAR } from "../config";
 import type { PeriodResult, Signal } from "../types";
 import { isSealed, opensAt } from "../types";
 
@@ -169,7 +169,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
           {ch.next_period < cur && (
             <div style={{ marginTop: 12 }}>
               <Act className="btn ghost small" label={`Settle ${word} ${day(ch.created_at_ms + ch.next_period * periodMs)}`} busyLabel="Scoring on OutLayer…"
-                run={async () => { await call("settle", { channel: id }, NEAR(0.5)); await new Promise((r) => setTimeout(r, 15_000)); await reload(); }} />
+                run={async () => { await call("settle", { channel: id }, NEAR(0.5), GAS_300); await new Promise((r) => setTimeout(r, 15_000)); await reload(); }} />
               <p className="fine">Anyone can settle an ended {word} once its signals are revealed. Attaches 0.5 NEAR for OutLayer; the unused part comes back.</p>
             </div>
           )}
