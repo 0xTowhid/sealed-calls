@@ -1,0 +1,12 @@
+=== accounts  commit 0cf7548674a2b4750f4a40a14caaf9c0f2c53c3b  Sat Nov  7 16:50:29 UTC 2026
+[16:50:33] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Error: 
+   0: [91mError: Account <to69.testnet> does not have enough balance (1.01991588915 NEAR) to cover TX cost (5.00760744245625 NEAR).[0m
+│    Transaction ID: 7gwmGp4FPYATbnbFKmH45JeLJECX4tZgt4pSJoWwE9pk
+New account <m1.to69.testnet> has been successfully created.
+│    Transaction ID: HwWD56dpaXKvfA6pqsTGbKjGcFiQm7V48GhxMpW1igzw
+New account <m2.to69.testnet> has been successfully created.
+[16:50:58] to69.testnet: Native account balance           0.005685910075 NEAR 
+[16:50:58] app.to69.testnet: 
+[16:50:59] m1.to69.testnet: Native account balance           0.5 NEAR 
+[16:51:01] m2.to69.testnet: Native account balance           0.5 NEAR 

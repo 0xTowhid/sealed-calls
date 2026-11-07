@@ -1,0 +1,7 @@
+=== deploy  commit 0cf7548674a2b4750f4a40a14caaf9c0f2c53c3b  Sat Nov  7 16:51:01 UTC 2026
+[16:51:04] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm
+[16:51:51] wasm sha256 e5611ce626e36983a2ce7738cf7b7ee3660249eda5e01dc5327f2f2e0bdcb5bc
+Error: 
+[16:52:02] list_calls on club 0: ERROR: view list_calls failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"FfRnXWkySknNieQR6rwj6y1Kq6mGhHZxFB4ZhzxYfZXB","block_height":276658209,"requested_account_id":"app.to69.testnet"},

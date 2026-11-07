@@ -1,0 +1,16 @@
+=== e2e  commit 0cf7548674a2b4750f4a40a14caaf9c0f2c53c3b  Sat Nov  7 16:52:02 UTC 2026
+[16:52:06] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[16:52:06] 1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)
+    Error: 
+       0: [91mError: Account <to69.testnet> does not have enough balance (0.005603253425 NEAR) to cover TX cost (2.300922241525251 NEAR).[0m
+file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29
+  throw new Error(`view ${method} failed: ${last}`);
+        ^
+
+Error: view get_club failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"CcFMFKLSASnLMWD6otTRpW5RkxX8bHxZUEprPU2ZB5C7","block_height":276658221,"requested_account_id":"app.to69.testnet"},"name":"UNKNOWN_ACCOUNT"},"code":-32000,"message":"Server error","data":"account app.to69.testnet does not exist while viewing"}
+    at Module.view (file:///home/runner/work/sealed-calls/sealed-calls/scripts/sc.mjs:29:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async [eval]:1:61
+
+Node.js v20.20.2
+[16:52:11] FAIL create_club did not create a club
