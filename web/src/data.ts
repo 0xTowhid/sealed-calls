@@ -1,58 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
-import { CLUB, GECKO } from "./config";
-import { allCalls, currentEpoch, getClub, getEpoch, accountId, wallet } from "./near";
-import { rememberName } from "./format";
-import type { Call, Club, EpochResult } from "./types";
-import { revealedMint } from "./types";
+import { accountId, wallet } from "./near";
+import type { Channel, Signal } from "./types";
 
-export type ClubData = {
-  club: Club;
-  calls: Call[];
-  epoch: number;
-  epochs: Map<number, EpochResult>;
-};
-
-export function useClubData(refreshMs = 20_000) {
-  const [data, setData] = useState<ClubData | null>(null);
+/** Runs `fn` now, on `deps` change and every `refreshMs`; keeps the last good value. */
+export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], refreshMs = 20_000) {
+  const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [, setNames] = useState(0);
-
-  const load = useCallback(async () => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const load = useCallback(fn, deps);
+  const run = useCallback(async () => {
     try {
-      const club = await getClub(CLUB);
-      if (!club) throw new Error(`Club ${CLUB} doesn't exist on this contract yet.`);
-      const [calls, epoch] = await Promise.all([allCalls(CLUB, club.call_count), currentEpoch(CLUB)]);
-      const epochs = new Map<number, EpochResult>();
-      await Promise.all(
-        Array.from({ length: epoch + 1 }, (_, e) => getEpoch(CLUB, e).then((r) => { if (r) epochs.set(e, r); })),
-      );
-      setData({ club, calls, epoch, epochs });
+      setData(await load());
       setError(null);
-      // Tickers for revealed tokens (display only; a failed lookup shows the short address).
-      const mints = [...new Set(calls.map(revealedMint).filter((m): m is string => !!m))];
-      for (const m of mints) {
-        fetch(`${GECKO}/tokens/${m}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => { const s = j?.data?.attributes?.symbol; if (s) { rememberName(m, s); setNames((n) => n + 1); } })
-          .catch(() => {});
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, []);
-
+  }, [load]);
   useEffect(() => {
-    load();
-    const t = setInterval(load, refreshMs);
+    run();
+    if (!refreshMs) return;
+    const t = setInterval(run, refreshMs);
     return () => clearInterval(t);
-  }, [load, refreshMs]);
-
-  return { data, error, reload: load };
+  }, [run, refreshMs]);
+  return { data, error, reload: run };
 }
 
+/** `?viewas=<account>` shows the app read-only as that account (for previews and demos); actions still need a wallet. */
+const VIEW_AS = new URLSearchParams(window.location.search).get("viewas");
+
 export function useAccount() {
-  const [acct, setAcct] = useState<string | null>(null);
+  const [acct, setAcct] = useState<string | null>(VIEW_AS);
   useEffect(() => {
+    if (VIEW_AS) return;
     let unsub: (() => void) | undefined;
     wallet()
       .then((s) => {
@@ -75,14 +54,20 @@ export function useNow(ms = 1000) {
   return now;
 }
 
-/** Same aggregation as the contract: S = Σr / (n + 5). Unscored resolved calls count as −100%. */
-export function record(calls: Call[]) {
-  const done = calls.filter((c) => c.score_bps != null);
-  const sum = done.reduce((s, c) => s + (c.score_bps ?? 0), 0);
+/** A creator's record from scored signals: same formula as the contract, S = Σr / (n + 5). */
+export function record(ch: Channel, signals: Signal[]) {
+  const scored = signals.filter((s) => s.r_bps != null);
+  const sum = scored.reduce((a, s) => a + (s.r_bps ?? 0), 0);
+  const filled = scored.filter((s) => !["not_filled", "invalid", "unrevealed", "no_market", "below_floor", "no_pool_at_post", "no_data", "no_trades"].includes((s.outcome ?? "").split(" ")[0]));
   return {
-    total: calls.length,
-    scored: done.length,
-    positive: done.filter((c) => (c.score_bps ?? 0) > 0).length,
-    score_bps: done.length ? Math.trunc(sum / (done.length + 5)) : null,
+    signals: signals.length,
+    scored: scored.length,
+    wins: scored.filter((s) => (s.r_bps ?? 0) > 0).length,
+    filled: filled.length,
+    notFilled: scored.filter((s) => (s.outcome ?? "").startsWith("not_filled")).length,
+    score_bps: scored.length ? Math.trunc(sum / (scored.length + 5)) : null,
+    winRate: filled.length ? Math.round((100 * filled.filter((s) => (s.r_bps ?? 0) > 0).length) / filled.length) : null,
+    periodsEarned: ch.stats.periods_released,
+    periodsSettled: ch.stats.periods_released + ch.stats.periods_refunded,
   };
 }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { signIn, signOut } from "./near";
-import { useAccount, useClubData } from "./data";
-import { ClubPage } from "./pages/ClubPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { FeedPage } from "./pages/FeedPage";
-import { PostPage } from "./pages/PostPage";
+import { useAccount } from "./data";
+import { Explore } from "./pages/Explore";
+import { ChannelPage } from "./pages/Channel";
+import { Feed } from "./pages/Feed";
+import { Desk } from "./pages/Desk";
 
 function useRoute() {
   const [hash, setHash] = useState(window.location.hash);
@@ -19,45 +19,40 @@ function useRoute() {
 export default function App() {
   const route = useRoute();
   const account = useAccount();
-  const { data, error, reload } = useClubData();
-  const page = route[0] || "club";
-
-  const link = (to: string, label: string) => (
-    <a href={`#/${to}`} className={page === to ? "on" : ""} aria-current={page === to ? "page" : undefined}>{label}</a>
+  const page = route[0] || "explore";
+  const link = (to: string, href: string, label: string) => (
+    <a href={href} className={page === to ? "on" : ""} aria-current={page === to ? "page" : undefined}>{label}</a>
   );
 
   return (
     <div className="wrap">
       <header className="mast">
         <a className="brand" href="#/">Sealed Calls</a>
-        {data && <span className="club-name">{data.club.config.name}</span>}
         <nav className="nav" aria-label="Main">
-          {link("club", "Club")}
-          {link("feed", "Member feed")}
-          {link("post", "Post a call")}
+          {link("explore", "#/", "Explore")}
+          {link("feed", "#/feed", "My feed")}
+          {link("desk", "#/desk", "Creator desk")}
           {account ? (
             <>
-              <a href={`#/caller/${account}`} className="acct">{account}</a>
+              <span className="acct">{account}</span>
               <button onClick={() => signOut()}>Sign out</button>
             </>
           ) : (
-            <button onClick={() => signIn()}>Sign in</button>
+            <button onClick={() => signIn()}>Connect wallet</button>
           )}
         </nav>
       </header>
 
-      {error && <div className="notice err" role="alert">{error}</div>}
-      {!data && !error && <p className="sub">Reading the club from NEAR testnet…</p>}
+      {page === "explore" && <Explore />}
+      {page === "c" && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
+      {page === "feed" && <Feed account={account} />}
+      {page === "desk" && <Desk account={account} />}
 
-      {data && page === "club" && <ClubPage data={data} account={account} reload={reload} />}
-      {data && page === "caller" && <ProfilePage data={data} caller={route[1] ?? ""} account={account} reload={reload} />}
-      {data && page === "feed" && <FeedPage data={data} account={account} reload={reload} />}
-      {data && page === "post" && <PostPage data={data} account={account} reload={reload} />}
-
-      <p className="fine" style={{ marginTop: 40 }}>
-        Calls can't be edited, deleted or hidden, and become public when they end. Scores are indicative returns for a
-        $500 trade. Sealed Calls doesn't stop callers trading against you; it makes their record public and pays them
-        only when calls work. NEAR testnet. <a href="https://github.com/0xTowhid/sealed-calls">Source</a>
+      <p className="fine foot">
+        Signals can't be edited, deleted or hidden, and become public when they end. Results are indicative: they replay each signal on public
+        candles (Hyperliquid, GeckoTerminal) with fees, leverage and, for DEX tokens, the price impact of a $500 trade. Sealed Calls doesn't stop
+        creators trading against subscribers; it makes their record public and pays them in full only when signals work. NEAR testnet.{" "}
+        <a href="https://github.com/0xTowhid/sealed-calls">Source</a>
       </p>
     </div>
   );

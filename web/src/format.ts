@@ -1,60 +1,74 @@
-import type { Call } from "./types";
-import { isUnrevealed, revealedMint } from "./types";
+import type { Signal } from "./types";
 
 export const pct = (bps: number | null | undefined, sign = true) =>
   bps == null ? "—" : `${sign && bps > 0 ? "+" : bps < 0 ? "−" : ""}${Math.abs(bps / 100).toFixed(1)}%`;
 
-export const near = (yocto: string | bigint, digits = 2) => {
-  const y = BigInt(yocto);
-  const whole = y / 10n ** 24n;
-  const frac = Number((y % 10n ** 24n) / 10n ** 18n) / 1e6;
-  return `${(Number(whole) + frac).toFixed(digits)} NEAR`;
+export const yocto = (y: string | bigint | number) => BigInt(typeof y === "number" ? Math.max(0, Math.trunc(y)) : y);
+export const nearNum = (y: string | bigint | number) => {
+  const v = yocto(y);
+  return Number(v / 10n ** 18n) / 1e6;
 };
-
-export const short = (s: string, a = 4, b = 4) => (s.length > a + b + 1 ? `${s.slice(0, a)}…${s.slice(-b)}` : s);
+export const near = (y: string | bigint | number, digits = 2) => `${nearNum(y).toFixed(digits).replace(/\.?0+$/, "") || "0"} NEAR`;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export const when = (ms: number) => {
-  const d = new Date(ms);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
-export const clock = (ms: number) => {
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
+const two = (n: number) => String(n).padStart(2, "0");
+export const day = (ms: number) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+export const when = (ms: number) => { const d = new Date(ms); return `${day(ms)} ${two(d.getHours())}:${two(d.getMinutes())}`; };
 
-export const until = (ms: number, now = Date.now()) => {
-  let s = Math.max(0, Math.round((ms - now) / 1000));
-  const h = Math.floor(s / 3600);
-  s -= h * 3600;
-  const m = Math.floor(s / 60);
-  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s - m * 60}s`;
-  return `${s}s`;
+/** Countdown "71:57:12" (hours can exceed 24). */
+export const countdown = (ms: number, now = Date.now()) => {
+  const s = Math.max(0, Math.round((ms - now) / 1000));
+  return `${Math.floor(s / 3600)}:${two(Math.floor((s % 3600) / 60))}:${two(s % 60)}`;
 };
 
-export const horizon = (min: number) => (min % 60 === 0 ? `${min / 60}h` : `${min}m`);
+/** Minutes -> "45m", "4h", "1d 6h", "3d". */
+export const dur = (min: number) => {
+  const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
+  return [d && `${d}d`, h && `${h}h`, m && `${m}m`].filter(Boolean).join(" ") || "0m";
+};
+export const planName = (days: number) =>
+  days % 365 === 0 ? `${days / 365 > 1 ? days / 365 + " years" : "12 months"}` :
+  days % 30 === 0 ? `${days / 30} month${days > 30 ? "s" : ""}` :
+  days % 7 === 0 ? `${days / 7} week${days > 7 ? "s" : ""}` : `${days} day${days > 1 ? "s" : ""}`;
 
-const NOTES: Record<string, string> = {
-  median: "median exit",
-  thin_exit_lowest: "thin exit, lowest close",
-  below_floor: "pool under $100k",
-  no_sol_usdc_pool: "no SOL/USDC pool",
-  no_pool_at_post: "no pool at posting",
-  no_entry_trade: "no trade after posting",
-  no_exit_trades: "no trades at exit",
+/** "3041.5" -> "3,041.5"; keeps the decimals the creator typed. */
+export const price = (s: string | number | null | undefined) => {
+  if (s == null || s === "") return "—";
+  const str = typeof s === "number" ? sig(s) : s;
+  const [i, f] = str.split(".");
+  return i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : "");
+};
+/** Number with 6 significant digits as a plain string. */
+export const sig = (x: number) => {
+  if (!(x > 0 && isFinite(x))) return "0";
+  const dec = Math.min(18, Math.max(0, 5 - Math.floor(Math.log10(x))));
+  return x.toFixed(dec).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+};
+
+export const periodWord = (minutes: number) => (minutes === 10080 ? "week" : minutes === 1440 ? "day" : "period");
+
+const OUTCOMES: Record<string, string> = {
+  not_filled: "not filled",
+  expired: "expired",
+  sl: "SL",
+  liquidated: "liquidated",
+  invalid: "invalid signal",
   unrevealed: "never opened",
-  duplicate: "duplicate call",
+  no_market: "no market",
+  below_floor: "pool under $100k",
+  no_pool_at_post: "no pool at posting",
+  no_data: "no price data",
+  no_trades: "no trades",
 };
-export const noteText = (c: Call) => (c.note ? (NOTES[c.note] ?? c.note) : "");
+/** "tp1+sl (15m)" -> "TP1 + SL (15m candles)". */
+export const outcomeText = (o: string | null) => {
+  if (!o) return "";
+  const m = o.match(/^([^ ]+)(?: \((\w+)\))?$/);
+  const core = (m?.[1] ?? o).split("+").map((p) => (p.startsWith("tp") ? p.toUpperCase() : OUTCOMES[p] ?? p)).join(" + ");
+  return m?.[2] ? `${core} (${m[2]} candles)` : core;
+};
+export const outcomeKind = (s: Signal): "w" | "l" | "n" | "s" =>
+  s.r_bps == null ? "s" : s.r_bps > 0 ? "w" : s.r_bps === 0 ? "n" : "l";
 
-/** Ticker cache filled from GeckoTerminal; falls back to a shortened mint. */
-const names = new Map<string, string>();
-export const tokenLabel = (c: Call) => {
-  if (isUnrevealed(c)) return "unrevealed";
-  const m = revealedMint(c);
-  if (!m) return "sealed";
-  return names.get(m) ?? short(m);
-};
-export const rememberName = (mint: string, sym: string) => names.set(mint, sym);
+/** Costs in basis points -> "0.09%", "1.2%". */
+export const costPct = (bps: number) => `${(bps / 100).toFixed(bps < 100 ? 2 : 1)}%`;

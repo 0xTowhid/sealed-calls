@@ -4,8 +4,8 @@ import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
-import { CONTRACT, NETWORK, RPCS } from "./config";
-import type { Call, Club, EpochResult } from "./types";
+import { CONTRACT, NETWORK, RPCS, GAS_300 } from "./config";
+import type { Channel, Config, Member, PeriodResult, Signal } from "./types";
 
 const enc = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 
@@ -28,19 +28,21 @@ export async function view<T>(method: string, args: object = {}): Promise<T> {
   throw new Error(`Couldn't read ${method} from ${CONTRACT}: ${last.slice(0, 200)}`);
 }
 
-export const getClub = (club: number) => view<Club | null>("get_club", { club });
-export const getEpoch = (club: number, epoch: number) => view<EpochResult | null>("get_epoch", { club, epoch });
-export const currentEpoch = (club: number) => view<number>("current_epoch", { club });
+export const getConfig = () => view<Config>("get_config");
+export const listChannels = () => view<Channel[]>("list_channels", { limit: 100 });
+export const getChannel = (channel: number) => view<Channel | null>("get_channel", { channel });
+export const getMember = (channel: number, account: string) => view<Member | null>("get_member", { channel, account });
+export const subscribers = (channel: number) => view<[string, number, boolean][]>("subscribers", { channel });
+export const readersNow = (channel: number) => view<[string, string][]>("readers_now", { channel });
+export const currentPeriod = (channel: number) => view<number>("current_period", { channel });
+export const getPeriod = (channel: number, period: number) => view<PeriodResult | null>("get_period", { channel, period });
+export const periodHeld = (channel: number, period: number) => view<string>("period_held", { channel, period });
+export const claimable = (channel: number, account: string) => view<[string, number[]]>("claimable", { channel, account });
 
-/** Every call in a club, newest first (the contract pages by 100). */
-export async function allCalls(club: number, total: number): Promise<Call[]> {
-  const out: Call[] = [];
-  let from = total;
-  while (from > 0) {
-    const page = await view<Call[]>("list_calls", { club, from_index: from, limit: 100 });
-    out.push(...page);
-    from -= 100;
-  }
+/** Every signal in a channel, newest first (the contract pages by 100). */
+export async function allSignals(channel: number, total: number): Promise<Signal[]> {
+  const out: Signal[] = [];
+  for (let from = total; from > 0; from -= 100) out.push(...(await view<Signal[]>("list_signals", { channel, from_index: from, limit: 100 })));
   return out;
 }
 
@@ -75,9 +77,9 @@ export async function accountId(): Promise<string | null> {
 }
 
 /** Calls a contract method from the signed-in account. Returns the transaction hash when the wallet gives one. */
-export async function call(method: string, args: object, deposit = "0", gas = "300000000000000"): Promise<string | null> {
+export async function call(method: string, args: object, deposit = "0", gas = GAS_300): Promise<string | null> {
   const s = await wallet();
-  if (!s.isSignedIn()) throw new Error("Sign in first.");
+  if (!s.isSignedIn()) throw new Error("Connect a wallet first.");
   const w = await s.wallet();
   const res = await w.signAndSendTransaction({
     receiverId: CONTRACT,
