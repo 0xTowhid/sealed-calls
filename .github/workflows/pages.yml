@@ -1,0 +1,29 @@
+name: pages
+
+# Builds web/ and publishes it to the gh-pages branch (served at https://0xtowhid.github.io/sealed-calls/).
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - name: publish gh-pages
+        run: |
+          cd web/dist && touch .nojekyll
+          git init -q -b gh-pages && git add -A
+          git -c user.name=sealed-calls-ci -c user.email=ci@users.noreply.github.com commit -q -m "site for ${{ github.sha }}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
