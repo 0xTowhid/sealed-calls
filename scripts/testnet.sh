@@ -25,7 +25,7 @@ view() { node sc.mjs view "$C" "$1" "$2"; }
 wait_until() { local t=$1; while [ "$(date +%s)" -lt "$t" ]; do sleep 10; done; }
 js() { node -e "$1"; }
 WASM=../contract/target/near/sealed_calls.wasm
-build() { (cd ../contract && cargo near build non-reproducible-wasm 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
+build() { (cd ../contract && cargo near build non-reproducible-wasm --no-embed-abi 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
 config_json() { # period_minutes
   echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
 }
@@ -82,7 +82,8 @@ settle_ready() {
   done
 }
 
-case "$1" in
+ARG="${1#*=}"
+case "${1%%=*}" in
 accounts)
   exists "$MAIN" || near account create-account sponsor-by-faucet-service "$MAIN" use-manually-provided-public-key "$PUBKEY" network-config testnet create
   FUND="scfund-${MAIN%%.*}-$(date +%j%H).testnet"   # one funder per hour; the faucet gives some NEAR each
@@ -98,6 +99,10 @@ accounts)
   for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
   ;;
 
+delete)  # delete=<account> (a sub-account of MAIN); its NEAR goes back to MAIN
+  near account delete-account "$ARG" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|deleted" | head -3
+  ;;
+
 wipe-app)
   if exists "$APP"; then
     near account delete-account "$APP" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|deleted" | head -5
@@ -110,6 +115,11 @@ deploy)
   exists "$APP" || near account create-account fund-myself "$APP" '3.4 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
   build
   C=$APP
+  NEED=$(js "console.log(Math.ceil(require('fs').statSync('$WASM').size/1e5*10+3)/10)")   # 1 NEAR per 100 kB of code + margin
+  log "code needs about $NEED NEAR of storage"
+  if ! view get_config '{}' >/dev/null 2>&1; then
+    near tokens "$MAIN" send-near "$APP" '0.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
+  fi
   if view get_config '{}' >/dev/null 2>&1; then
     log "upgrading existing v2 contract (state kept); pointing it at the current scorer"
     near contract deploy "$APP" use-file "$WASM" without-init-call network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
@@ -127,7 +137,7 @@ e2e)
   [ "$(curl -sL "$SCORER_URL" | sha256sum | cut -d' ' -f1)" = "$SCORER_HASH" ] || { log "FAIL scorer URL bytes do not match hash"; exit 1; }
   C="e2e$(date -u +%d%H%M).$MAIN"
   log "0. throwaway contract $C with a 20-minute period"
-  near account create-account fund-myself "$C" '3.4 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|created" | head -3
+  near account create-account fund-myself "$C" '3.9 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|created" | head -3
   build
   near contract deploy "$C" use-file "$WASM" with-init-call new json-args "$(config_json 20)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Error"
   sleep 3; view get_config '{}' >/dev/null || { log "FAIL deploy"; exit 1; }
