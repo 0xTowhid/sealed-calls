@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Testnet operations for the workflow. Usage: scripts/testnet.sh <action>
-#   accounts : main account via faucet (+ a faucet funder topping it up) and sub-accounts
-#   deploy   : deploy/upgrade the contract at app.<main>
-#   e2e      : the full loop on a fresh test club: post a sealed BONK call -> member decrypts ->
-#              anyone reveals via drand -> settle via OutLayer -> payout. ~20 minutes.
-#   settle   : reveal any sealed calls of club $CLUB (default 0) from drand, then settle epoch $EPOCH (default 0)
-#   status   : balances and club 0
-# Env: MAIN, PUBKEY, SK (private key), SCORER_URL, SCORER_HASH (e2e)
+# Testnet operations for the workflow (v2: channels, subscriptions, signals). Usage: scripts/testnet.sh <action>
+#   accounts : main account via faucet (+ a faucet funder) and member sub-accounts
+#   wipe-app : delete app.<main> (its NEAR goes back to <main>) so a fresh contract can be deployed
+#   deploy   : create app.<main> if needed and deploy (fresh: init with a daily period) or upgrade
+#   e2e      : the full v2 loop on a throwaway contract with a 20-minute period, then deletes it:
+#              channel -> subscribe -> sealed BTC signal -> member reads -> drand reveal ->
+#              settle via OutLayer -> release or refund claim. ~35 minutes.
+#   settle   : reveal sealed signals of channel $CH (default 0) on app.<main> from drand, then settle
+#   status   : balances, config and channels on app.<main>
+# Env: MAIN, PUBKEY, SK (private key), SCORER_URL, SCORER_HASH
 set -uo pipefail
 cd "$(dirname "$0")"
-APP="app.$MAIN"; CALLER="$MAIN"; M1="m1.$MAIN"; M2="m2.$MAIN"   # calls are posted by the owner account itself
-BONK="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+APP="app.$MAIN"; M1="m1.$MAIN"; M2="m2.$MAIN"
 # near-cli-rs (Nov 2026): the private key is positional; --signer-public-key was removed.
 SIGN=(sign-with-plaintext-private-key "$SK" send)
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
@@ -20,8 +21,14 @@ call() { # signer contract method json deposit
   near contract call-function as-transaction "$2" "$3" json-args "$4" prepaid-gas '300.0 Tgas' attached-deposit "$5" sign-as "$1" network-config testnet "${SIGN[@]}" 2>&1 \
     | grep -iE "Transaction ID|EVENT_JSON|error|panicked|return value" | head -12 | sed 's/^/    /'
 }
-view() { node sc.mjs view "$APP" "$1" "$2"; }
+view() { node sc.mjs view "$C" "$1" "$2"; }
 wait_until() { local t=$1; while [ "$(date +%s)" -lt "$t" ]; do sleep 10; done; }
+js() { node -e "$1"; }
+WASM=../contract/target/near/sealed_calls.wasm
+build() { (cd ../contract && cargo near build non-reproducible-wasm 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
+config_json() { # period_minutes
+  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
+}
 
 # Refuse to sign anything unless the secret's key really is a full-access key of $MAIN on testnet.
 preflight() {
@@ -33,19 +40,57 @@ preflight() {
   echo "$r" | head -c 300; echo; exit 1
 }
 preflight
+npm install --silent >/dev/null 2>&1
+
+# Reveal every sealed signal of channel $2 on contract $1 that drand can open (waits up to 25 min for one).
+reveal_all() {
+  local C=$1 CH=$2
+  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
+  for ID in $(js "for (const s of require('/tmp/sigs.json')) if (s.status==='Sealed') console.log(s.id)"); do
+    js "require('fs').writeFileSync('/tmp/s.json',JSON.stringify(require('/tmp/sigs.json').find(s=>s.id==$ID)))"
+    RT=$(js "const s=require('/tmp/s.json');console.log(1692803367+(s.reveal_round-1)*3+10)")
+    if [ "$RT" -gt "$(date +%s)" ] && [ $((RT - $(date +%s))) -lt 1500 ]; then log "signal $ID: waiting $(( RT - $(date +%s) ))s for drand"; wait_until "$RT"; fi
+    if OPENED=$(node sc.mjs tlock-open /tmp/s.json 2>/dev/null); then
+      log "signal $ID opened from drand: $OPENED"
+      PT=$(js "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
+      call "$M2" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0 NEAR'
+    else
+      log "signal $ID cannot be opened yet; trying mark_unrevealed"
+      call "$M2" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0 NEAR'
+    fi
+  done
+}
+
+# Settle periods of channel $2 on $1 until none is ready; prints results.
+settle_ready() {
+  local C=$1 CH=$2
+  for k in 1 2 3 4 5 6; do
+    local NP; NP=$(view get_channel "{\"channel\":$CH}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).next_period))")
+    local CUR; CUR=$(view current_period "{\"channel\":$CH}")
+    [ "$NP" -lt "$CUR" ] || { log "period $NP has not ended yet (current $CUR)"; break; }
+    log "settle channel $CH period $NP (held $(view period_held "{\"channel\":$CH,\"period\":$NP}"))"
+    call "$M2" "$C" settle "{\"channel\":$CH}" '0.5 NEAR'
+    local R=null
+    for i in $(seq 1 30); do
+      R=$(view get_period "{\"channel\":$CH,\"period\":$NP}")
+      echo "$R" | grep -q '"Settled"' && break
+      [ "$R" = "null" ] && [ "$i" -gt 2 ] && { log "   scoring failed; period reopened"; break; }
+      sleep 10
+    done
+    log "   period $NP: $R"
+    echo "$R" | grep -q '"Settled"' || return 1
+  done
+}
 
 case "$1" in
 accounts)
   exists "$MAIN" || near account create-account sponsor-by-faucet-service "$MAIN" use-manually-provided-public-key "$PUBKEY" network-config testnet create
-  FUND="scfund-${MAIN%%.*}-$(date +%j%H).testnet"   # one funder per hour; the faucet gives ~10 NEAR each
+  FUND="scfund-${MAIN%%.*}-$(date +%j%H).testnet"   # one funder per hour; the faucet gives some NEAR each
   exists "$FUND" || near account create-account sponsor-by-faucet-service "$FUND" use-manually-provided-public-key "$PUBKEY" network-config testnet create >/dev/null 2>&1 || log "funder faucet unavailable"
-  for f in "$FUND"; do
-    if exists "$f" && bal "$f" | grep -qE "balance +[1-9][0-9]*(\.[0-9]+)? NEAR"; then
-      sleep 3; near tokens "$f" send-near "$MAIN" '9.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error" | head -3; log "moved 9.5 NEAR from $f"
-    fi
-  done
-  sleep 5
-  for spec in "$APP:3.2" "$M1:0.5" "$M2:0.5"; do
+  if exists "$FUND" && bal "$FUND" | grep -qE "balance +[1-9][0-9]*(\.[0-9]+)? NEAR"; then
+    sleep 3; near tokens "$FUND" send-near "$MAIN" '9.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error" | head -3
+  fi
+  for spec in "$M1:0.5" "$M2:0.5"; do
     a="${spec%%:*}"; amt="${spec##*:} NEAR"
     if exists "$a"; then log "$a exists"; continue; fi
     near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
@@ -53,112 +98,89 @@ accounts)
   for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
   ;;
 
-deploy)
-  WASM=../contract/target/near/sealed_calls.wasm
-  (cd ../contract && cargo near build non-reproducible-wasm 2>&1 | tail -2)
-  log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"
-  if node sc.mjs view "$APP" get_club '{"club":0}' >/dev/null 2>&1; then   # code present -> upgrade
-    log "upgrading existing contract (state kept)"
-    near contract deploy "$APP" use-file "$WASM" without-init-call network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
-  else
-    near contract deploy "$APP" use-file "$WASM" with-init-call new json-args '{}' prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
+wipe-app)
+  if exists "$APP"; then
+    near account delete-account "$APP" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|deleted" | head -5
   fi
-  sleep 3; log "list_calls on club 0: $(node sc.mjs view "$APP" list_calls '{"club":0}' 2>&1 | head -c 200)"
+  sleep 3; log "$MAIN: $(bal "$MAIN")"
+  ;;
+
+deploy)
+  : "${SCORER_URL:?}" "${SCORER_HASH:?}"
+  exists "$APP" || near account create-account fund-myself "$APP" '3.4 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
+  build
+  C=$APP
+  if view get_config '{}' >/dev/null 2>&1; then
+    log "upgrading existing v2 contract (state kept); pointing it at the current scorer"
+    near contract deploy "$APP" use-file "$WASM" without-init-call network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
+    sleep 3
+    CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.scorer_wasm_url=process.argv[1];c.scorer_wasm_hash=process.argv[2];console.log(JSON.stringify({config:c}))})" "$SCORER_URL" "$SCORER_HASH")
+    call "$MAIN" "$APP" set_config "$CFG" '0 NEAR'
+  else
+    near contract deploy "$APP" use-file "$WASM" with-init-call new json-args "$(config_json 1440)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
+  fi
+  sleep 3; log "config: $(view get_config '{}' 2>&1 | head -c 400)"
   ;;
 
 e2e)
-  npm install --silent >/dev/null 2>&1
   : "${SCORER_URL:?}" "${SCORER_HASH:?}"
   [ "$(curl -sL "$SCORER_URL" | sha256sum | cut -d' ' -f1)" = "$SCORER_HASH" ] || { log "FAIL scorer URL bytes do not match hash"; exit 1; }
-  # 1. A fresh test club. Governor = MAIN here; gate (c) repeats this through a Sputnik DAO.
-  CFG=$(cat <<J
-{"config":{"name":"E2E $(date -u +%m%d-%H%M)","epoch_minutes":15,"epoch_budget":"100000000000000000000000","min_record":1,"horizons_min":[10],"grace_min":10,"max_calls_per_day":5,"scorer_wasm_url":"$SCORER_URL","scorer_wasm_hash":"$SCORER_HASH","outlayer":"outlayer.testnet"},"callers":["$CALLER"],"members":["$M1"]}
-J
-)
-  log "1. create_club (escrow 0.3 NEAR, budget 0.1 NEAR, epoch 15 min, horizon 10 min)"
-  call "$MAIN" "$APP" create_club "$CFG" '0.3 NEAR'
-  CLUB=$(node -e "import('./sc.mjs').then(async m=>{for(let i=0;;i++){const c=await m.view('$APP','get_club',{club:i});if(!c){console.log(i-1);break}}})")
-  [[ "$CLUB" =~ ^[0-9]+$ ]] || { log "FAIL create_club did not create a club"; exit 1; }
-  log "   club id: $CLUB"; START=$(date +%s)
-  # 2. Member registers an X25519 key.
+  C="e2e$(date -u +%d%H%M).$MAIN"
+  log "0. throwaway contract $C with a 20-minute period"
+  near account create-account fund-myself "$C" '3.4 NEAR' use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|created" | head -3
+  build
+  near contract deploy "$C" use-file "$WASM" with-init-call new json-args "$(config_json 20)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Error"
+  sleep 3; view get_config '{}' >/dev/null || { log "FAIL deploy"; exit 1; }
+  cleanup() { log "deleting $C (NEAR back to $MAIN)"; near account delete-account "$C" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2; }
+  trap cleanup EXIT
+
+  log "1. $MAIN creates a channel: 1 day for 0.2 NEAR, 7 days for 1 NEAR"
+  call "$MAIN" "$C" create_channel '{"name":"E2E desk","about":"test","plans":[{"days":1,"price":"200000000000000000000000"},{"days":7,"price":"1000000000000000000000000"}],"max_members":25}' '0.05 NEAR'
+  log "2. $M1 subscribes (1 day) and registers a key; $M2 subscribes without a key"
+  call "$M1" "$C" subscribe '{"channel":0,"plan":0}' '0.25 NEAR'
   PUB=$(node sc.mjs member-keygen /tmp/m1.key)
-  log "2. $M1 registers key $PUB"
-  call "$M1" "$APP" register_key "{\"club\":$CLUB,\"pubkey\":\"$PUB\"}" '0 NEAR'
-  # 3. Caller seals and posts a real BONK call.
-  MEMBERS=$(node -e "import('./sc.mjs').then(async m=>{const c=await m.view('$APP','get_club',{club:$CLUB});console.log(JSON.stringify(c.members.filter(x=>x.pubkey).map(x=>({member:x.account,pubkey:x.pubkey}))))})")
-  log "3. seal + post_call (members: $MEMBERS)"
-  node sc.mjs seal "$CLUB" "$CALLER" "$BONK" 10 "$MEMBERS" /tmp/post.json
-  call "$CALLER" "$APP" post_call "$(cat /tmp/post.json)" '0.1 NEAR'
-  sleep 3
-  CALLS=$(view list_calls "{\"club\":$CLUB}"); echo "$CALLS" > /tmp/calls.json
-  ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/calls.json'))[0]?.id ?? '')")
-  [ -n "$ID" ] || { log "FAIL no call posted"; exit 1; }
-  view get_call "{\"call_id\":$ID}" > /tmp/call.json
-  log "   call $ID: status $(node -e "console.log(JSON.stringify(require('/tmp/call.json').status))"), opens at $(node -e "const c=require('/tmp/call.json');console.log(new Date(c.posted_at_ms+c.horizon_min*60000).toISOString())")"
-  # 4. Member reads it immediately; the public cannot.
-  log "4. member decrypts now: $(node sc.mjs member-open /tmp/call.json "$M1" /tmp/m1.key)"
-  log "   public tlock-open now (must fail): $(node sc.mjs tlock-open /tmp/call.json 2>&1 | head -c 140)"
-  log "   early reveal attempt (must fail):"; call "$M2" "$APP" reveal "{\"call_id\":$ID,\"plaintext\":$(node -e "console.log(JSON.stringify(require('fs').readFileSync('/tmp/post.json.plaintext','utf8')))")}" '0 NEAR'
-  # 5. After the horizon, a stranger (m2) opens it from drand and reveals.
-  OPEN=$(node -e "const c=require('/tmp/call.json');console.log(Math.ceil((c.posted_at_ms+c.horizon_min*60000)/1000)+75)")
-  log "5. waiting for the horizon and drand round (~$(( (OPEN - $(date +%s)) / 60 )) min)"; wait_until "$OPEN"
-  OPENED=$(node sc.mjs tlock-open /tmp/call.json); log "   tlock-open: $OPENED"
-  PT=$(node -e "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
-  call "$M2" "$APP" reveal "{\"call_id\":$ID,\"plaintext\":$PT}" '0 NEAR'
-  sleep 3; log "   status after reveal: $(view get_call "{\"call_id\":$ID}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s).status)))")"
-  # 6. After the epoch ends, anyone settles: contract -> OutLayer scorer -> callback -> payout.
-  wait_until $((START + 15*60 + 20))
-  log "6. settle epoch 0 via OutLayer (caller balance before: $(bal "$CALLER"))"
-  call "$MAIN" "$APP" settle "{\"club\":$CLUB,\"epoch\":0}" '0.5 NEAR'
-  for i in $(seq 1 30); do
-    E=$(view get_epoch "{\"club\":$CLUB,\"epoch\":0}")
-    echo "$E" | grep -q '"Settled"' && break
-    [ "$E" = "null" ] && [ "$i" -gt 2 ] && { log "   epoch reset: scoring failed (see settle_failed event above)"; break; }
-    sleep 10
-  done
-  log "   epoch result: $E"
-  log "   call after scoring: $(view get_call "{\"call_id\":$ID}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(JSON.stringify({score_bps:c.score_bps,note:c.note}))})")"
-  log "   caller balance after: $(bal "$CALLER")"
-  echo "$E" | grep -q '"Settled"' && log "E2E PASS" || log "E2E FAIL at settle"
+  call "$M1" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB\"}" '0 NEAR'
+  call "$M2" "$C" subscribe '{"channel":0,"plan":0}' '0.25 NEAR'
+  log "   subscribers: $(view subscribers '{"channel":0}')"
+  log "   held for period 0: $(view period_held '{"channel":0,"period":0}')  (half of 0.4 NEAR, spread over each day)"
+
+  BTC=$(curl -s https://api.hyperliquid.xyz/info -H 'content-type: application/json' -d '{"type":"allMids"}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).BTC))")
+  SIG=$(js "const p=Number(process.argv[1]);const f=x=>x.toFixed(0);console.log(JSON.stringify({market:{venue:'hyperliquid',address:'BTC',symbol:'BTC'},side:'long',leverage:5,entry_low:f(p*0.995),entry_high:f(p*1.005),tps:[f(p*1.004+p*0.002),f(p*1.02)],sl:f(p*0.98),msg:'E2E: BTC long around '+f(p)}))" "$BTC")
+  READERS=$(view readers_now '{"channel":0}')
+  log "3. seal + post a BTC long (valid 15 min) for readers $READERS: $SIG"
+  node sc.mjs seal 0 "$MAIN" "$SIG" 15 "$READERS" /tmp/post.json
+  call "$MAIN" "$C" post_signal "$(cat /tmp/post.json)" '0.1 NEAR'
+  sleep 3; view get_signal '{"signal_id":0}' > /tmp/s0.json || { log "FAIL no signal"; exit 1; }
+  log "4. member reads it now: $(node sc.mjs member-open /tmp/s0.json "$M1" /tmp/m1.key)"
+  log "   public tlock-open now (must fail): $(node sc.mjs tlock-open /tmp/s0.json 2>&1 | head -c 120)"
+  log "   early reveal (must fail):"; call "$M2" "$C" reveal "{\"signal_id\":0,\"plaintext\":$(js "console.log(JSON.stringify(require('fs').readFileSync('/tmp/post.json.plaintext','utf8')))")}" '0 NEAR'
+
+  log "5. after validity, anyone reveals from drand"
+  reveal_all "$C" 0
+  log "   revealed: $(view get_signal '{"signal_id":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);console.log(JSON.stringify({status:x.status,body:x.body}))})")"
+
+  PEND=$(view get_channel '{"channel":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(Math.ceil(c.created_at_ms/1000)+20*60+15)})")
+  log "6. wait for period 0 to end ($(( PEND - $(date +%s) ))s), then settle via OutLayer"; wait_until "$PEND"
+  settle_ready "$C" 0 || { log "E2E FAIL at settle"; exit 1; }
+  log "   signal after scoring: $(view get_signal '{"signal_id":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);console.log(JSON.stringify({r_bps:x.r_bps,outcome:x.outcome,fill:x.fill_price,exit:x.exit_price,cost_bps:x.cost_bps}))})")"
+  log "   channel stats: $(view get_channel '{"channel":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s).stats)))")"
+  CL=$(view claimable "{\"channel\":0,\"account\":\"$M1\"}")
+  log "7. $M1 can claim back: $CL"
+  if echo "$CL" | grep -qE '^\["[1-9]'; then call "$M1" "$C" claim_refund '{"channel":0}' '0 NEAR'; fi
+  log "E2E PASS"
   ;;
 
 settle)
-  # Finish an epoch of club ${CLUB:-0}: reveal every sealed call from drand (anyone may), then settle.
-  CLUB=${CLUB:-0}; EP=${EPOCH:-0}
-  view list_calls "{\"club\":$CLUB,\"limit\":50}" > /tmp/calls.json
-  node -e "for (const c of require('/tmp/calls.json')) console.log(JSON.stringify({id:c.id,epoch:c.epoch,caller:c.caller,posted:new Date(c.posted_at_ms).toISOString(),horizon_min:c.horizon_min,status:c.status,score_bps:c.score_bps,note:c.note}))"
-  for ID in $(node -e "for (const c of require('/tmp/calls.json')) if (c.epoch==$EP && c.status==='Sealed') console.log(c.id)"); do
-    node -e "const c=require('/tmp/calls.json').find(c=>c.id==$ID);require('fs').writeFileSync('/tmp/c.json',JSON.stringify(c))"
-    RT=$(node -e "const c=require('/tmp/c.json');console.log(1692803367+(c.reveal_round-1)*3+10)")
-    if [ "$RT" -gt "$(date +%s)" ] && [ $((RT - $(date +%s))) -lt 1500 ]; then log "call $ID: waiting $(( RT - $(date +%s) ))s for drand round $(node -e "console.log(require('/tmp/c.json').reveal_round)")"; wait_until "$RT"; fi
-    if OPENED=$(node sc.mjs tlock-open /tmp/c.json 2>/dev/null); then
-      log "call $ID opened from drand: $OPENED"
-      PT=$(node -e "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
-      call "$M2" "$APP" reveal "{\"call_id\":$ID,\"plaintext\":$PT}" '0 NEAR'
-    else
-      log "call $ID cannot be opened yet; trying mark_unrevealed (works after the grace period)"
-      call "$M2" "$APP" mark_unrevealed "{\"call_id\":$ID}" '0 NEAR'
-    fi
-  done
-  sleep 3
-  log "settle club $CLUB epoch $EP via OutLayer (caller balance before: $(bal "$CALLER"))"
-  call "$MAIN" "$APP" settle "{\"club\":$CLUB,\"epoch\":$EP}" '0.5 NEAR'
-  E=null
-  for i in $(seq 1 30); do
-    E=$(view get_epoch "{\"club\":$CLUB,\"epoch\":$EP}")
-    echo "$E" | grep -q '"Settled"' && break
-    [ "$E" = "null" ] && [ "$i" -gt 2 ] && { log "   epoch reset: scoring failed"; break; }
-    sleep 10
-  done
-  log "   epoch result: $E"
-  view list_calls "{\"club\":$CLUB,\"limit\":50}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const c of JSON.parse(s))console.log(JSON.stringify({id:c.id,status:c.status,score_bps:c.score_bps,note:c.note,entry_usd:c.entry_usd,exit_usd:c.exit_usd,cost_bps:c.cost_bps}))})"
-  log "   caller balance after: $(bal "$CALLER")"
-  echo "$E" | grep -q '"Settled"' && log "SETTLE PASS" || log "SETTLE FAIL"
+  C=$APP; CH=${CH:-0}
+  reveal_all "$C" "$CH"
+  settle_ready "$C" "$CH" && log "SETTLE PASS" || log "SETTLE FAIL"
   ;;
 
 status)
+  C=$APP
   for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
-  view get_club '{"club":0}'
+  view get_config '{}'; echo
+  view list_channels '{}' | head -c 2000; echo
   ;;
 *) echo "unknown action $1"; exit 1;;
 esac

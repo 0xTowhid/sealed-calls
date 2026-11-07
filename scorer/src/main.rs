@@ -26,15 +26,27 @@ fn run() -> Result<Vec<SignalScore>, String> {
     io::stdin().read_to_string(&mut raw).map_err(|e| e.to_string())?;
     let job: JobIn = serde_json::from_str(&raw).map_err(|e| format!("bad input: {e}"))?;
     let now_s = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs();
-    job.signals.iter().map(|s| score(s, now_s, job.reference_usd, job.liquidity_floor_usd)).collect()
+    // Hyperliquid perp names, fetched once if any signal needs them.
+    let hl_coins: Vec<String> = if job.signals.iter().any(|s| s.venue == "hyperliquid") {
+        post(HL, &json!({ "type": "meta" }))?["universe"]
+            .as_array()
+            .map(|u| u.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+    job.signals.iter().map(|s| score(s, now_s, job.reference_usd, job.liquidity_floor_usd, &hl_coins)).collect()
 }
 
-fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64) -> Result<SignalScore, String> {
+fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[String]) -> Result<SignalScore, String> {
     let Some(plan) = plan_of(s) else { return Ok(lose(s.id, "invalid")) };
     let posted_s = s.posted_at_ms / 1000;
     let end_s = (s.posted_at_ms + s.valid_min as u64 * 60_000) / 1000;
     match s.venue.as_str() {
         "hyperliquid" => {
+            if !hl_coins.iter().any(|c| c == &s.address) {
+                return Ok(lose(s.id, "no_market"));
+            }
             let (sec, name) = hl_interval(now_s, posted_s);
             let body = json!({ "type": "candleSnapshot", "req": { "coin": s.address, "interval": name, "startTime": posted_s * 1000, "endTime": end_s * 1000 } });
             let v = post(HL, &body)?;

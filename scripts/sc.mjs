@@ -1,8 +1,9 @@
-// Sealed Calls client helpers: the same crypto the web app will use.
+// Sealed Calls client helpers (v2 signals): the same crypto the web app uses.
 //   node sc.mjs view <contract> <method> '<json args>'
 //   node sc.mjs member-keygen <outfile>                       -> prints base64 X25519 public key
-//   node sc.mjs seal <club> <caller> <mint> <horizon_min> <memberPubsJson> <outfile>
-//        memberPubsJson: [{"member":"m1.x.testnet","pubkey":"<b64>"}]  -> writes post_call args (minus club) + secrets
+//   node sc.mjs seal <channel> <creator> <signalJson> <valid_min> <readersJson> <outfile>
+//        readersJson: the contract's readers_now output [["m1.x.testnet","<b64>"], ...]
+//        -> writes post_signal args to <outfile> and the plaintext to <outfile>.plaintext
 //   node sc.mjs member-open <callJson> <member> <memberKeyFile>  -> prints plaintext, checks commitment
 //   node sc.mjs tlock-open <callJson>                          -> prints plaintext once the drand round has passed
 import { timelockEncrypt, timelockDecrypt, roundAt, mainnetClient, Buffer } from "tlock-js";
@@ -32,27 +33,37 @@ export async function view(contract, method, args = {}) {
 /** First drand round whose time is >= t_s (matches the contract's check_round). */
 export const roundFor = (t_s) => Math.ceil((t_s - QUICKNET_GENESIS_S) / PERIOD_S) + 1;
 
-export async function seal({ club, caller, mint, horizonMin, members, latencyS = 60 }) {
+/**
+ * Seal a v2 signal. `signal` = { market:{venue,network,address,symbol}, side, leverage, entry_low,
+ * entry_high, tps:[...], sl, msg }. Returns post_signal args and the exact plaintext.
+ */
+export async function seal({ channel, creator, validMin, signal, members, latencyS = 60 }) {
   await sodium.ready;
   const salt = randomBytes(16).toString("hex");
+  const m = signal.market;
   // Key order is fixed: the commitment covers these exact bytes.
-  const plaintext = JSON.stringify({ v: 1, club, caller, mint, horizon_min: horizonMin, salt });
+  const plaintext = JSON.stringify({
+    v: 2, channel, creator, valid_min: validMin,
+    market: { venue: m.venue, network: m.network ?? null, address: m.address, symbol: m.symbol },
+    side: signal.side, leverage: signal.leverage, entry_low: signal.entry_low, entry_high: signal.entry_high,
+    tps: signal.tps, sl: signal.sl, msg: signal.msg ?? "", salt,
+  });
   const commit = sha256hex(plaintext);
-  const endS = Math.floor(Date.now() / 1000) + horizonMin * 60 + latencyS;
+  const endS = Math.floor(Date.now() / 1000) + validMin * 60 + latencyS;
   const round = roundFor(endS);
   const tlock_ct = await timelockEncrypt(round, Buffer.from(plaintext), mainnetClient());
   const callKey = sodium.randombytes_buf(sodium.crypto_secretbox_KEYBYTES);
   const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
   const box = sodium.crypto_secretbox_easy(sodium.from_string(plaintext), nonce, callKey);
   const member_ct = b64(new Uint8Array([...nonce, ...box]));
-  const wrapped_keys = members.map((m) => ({ member: m.member, key: b64(sodium.crypto_box_seal(callKey, unb64(m.pubkey))) }));
-  return { args: { club, horizon_min: horizonMin, commit, reveal_round: round, tlock_ct, member_ct, wrapped_keys }, plaintext };
+  const wrapped_keys = members.map((x) => ({ member: x.member, key: b64(sodium.crypto_box_seal(callKey, unb64(x.pubkey))) }));
+  return { args: { channel, valid_min: validMin, commit, reveal_round: round, tlock_ct, member_ct, wrapped_keys }, plaintext };
 }
 
 export async function memberOpen(call, member, keypair) {
   await sodium.ready;
   const w = call.wrapped_keys.find((k) => k.member === member);
-  if (!w) throw new Error(`call ${call.id} was not wrapped to ${member}`);
+  if (!w) throw new Error(`signal ${call.id} was not wrapped to ${member}`);
   const callKey = sodium.crypto_box_seal_open(unb64(w.key), unb64(keypair.publicKey), unb64(keypair.privateKey));
   const raw = unb64(call.member_ct);
   const nb = sodium.crypto_secretbox_NONCEBYTES;
@@ -79,7 +90,8 @@ try {
     writeFileSync(a[0], JSON.stringify({ publicKey: b64(kp.publicKey), privateKey: b64(kp.privateKey) }));
     out(b64(kp.publicKey));
   } else if (cmd === "seal") {
-    const r = await seal({ club: Number(a[0]), caller: a[1], mint: a[2], horizonMin: Number(a[3]), members: JSON.parse(a[4]) });
+    const members = JSON.parse(a[4]).map(([member, pubkey]) => ({ member, pubkey }));
+    const r = await seal({ channel: Number(a[0]), creator: a[1], signal: JSON.parse(a[2]), validMin: Number(a[3]), members });
     writeFileSync(a[5], JSON.stringify(r.args));
     writeFileSync(a[5] + ".plaintext", r.plaintext);
     out({ commit: r.args.commit, reveal_round: r.args.reveal_round, tlock_bytes: r.args.tlock_ct.length, wrapped: r.args.wrapped_keys.length });
