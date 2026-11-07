@@ -1,0 +1,22 @@
+=== settle  commit 11a993b17547458c552891b8b05290015d3c3aa5  Sat Nov  7 17:32:58 UTC 2026
+[17:33:01] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+{"id":1,"epoch":0,"caller":"to69.testnet","posted":"2026-11-07T17:28:16.407Z","horizon_min":10,"status":"Sealed","score_bps":null,"note":null}
+{"id":0,"epoch":0,"caller":"to69.testnet","posted":"2026-11-07T17:15:56.357Z","horizon_min":10,"status":{"Revealed":{"mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.to69.testnet","at_ms":1794072441159}},"score_bps":null,"note":null}
+[17:33:02] call 1 cannot be opened yet; trying mark_unrevealed (works after the grace period)
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: 4nY2bfoPkFad2E4bYmLJog3cxz9YSGbXBado7EhrHCFT
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:427:9:\ngrace period not over")[0m
+[17:33:13] settle club 0 epoch 0 via OutLayer (caller balance before: Native account balance           5.2588729602436776 NEAR )
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: 6jEhiXuy1kLDe2GkDGD2NqKz9ZGBatBHZ7j29gr5BweR
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:449:13:\ncall 1 is still sealed")[0m
+[17:33:39]    epoch reset: scoring failed
+[17:33:39]    epoch result: null
+{"id":1,"status":"Sealed","score_bps":null,"note":null,"entry_usd":null,"exit_usd":null,"cost_bps":null}
+{"id":0,"status":{"Revealed":{"mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.to69.testnet","at_ms":1794072441159}},"score_bps":null,"note":null,"entry_usd":null,"exit_usd":null,"cost_bps":null}
+[17:33:40]    caller balance after: Native account balance           5.2586597118643946 NEAR 
+[17:33:40] SETTLE FAIL
