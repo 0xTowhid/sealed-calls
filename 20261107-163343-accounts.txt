@@ -1,0 +1,11 @@
+=== accounts  commit 53fc5dc5a7f17b2242ddb1916d7ade1dfd5db47f  Sat Nov  7 16:33:43 UTC 2026
+[16:33:58] app.sealedcalls-towhid.testnet exists
+[16:34:00] caller.sealedcalls-towhid.testnet exists
+│    Transaction ID: sU6voYHtdGgJnPANd7PTezGfB383Dp2dqqWZ1c7wSbL
+New account <m1.sealedcalls-towhid.testnet> has been successfully created.
+[16:34:05] m2.sealedcalls-towhid.testnet exists
+[16:34:06] sealedcalls-towhid.testnet: Native account balance           10.4713239839626225 NEAR 
+[16:34:07] app.sealedcalls-towhid.testnet: Native account balance                 6.9978135017665668 NEAR 
+[16:34:08] caller.sealedcalls-towhid.testnet: Native account balance             1 NEAR 
+[16:34:09] m1.sealedcalls-towhid.testnet: Native account balance           0.5 NEAR 
+[16:34:10] m2.sealedcalls-towhid.testnet: Native account balance           0.5 NEAR 

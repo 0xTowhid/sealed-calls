@@ -1,0 +1,44 @@
+=== e2e  commit 53fc5dc5a7f17b2242ddb1916d7ade1dfd5db47f  Sat Nov  7 16:34:10 UTC 2026
+[16:34:11] 1. create_club (escrow 2 NEAR, budget 1 NEAR, epoch 15 min, horizon 10 min)
+    │    Transaction ID: 9a9LUYgccguEHeRiuQaP3LEwXmpdBtKcdrfNaStC1bmy
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"club_created","data":[{"club":1,"governor":"sealedcalls-towhid.testnet","escrow":"1995570000000000000000000"}]}
+    Function execution return value (printed to stdout):
+[16:34:16]    club id: 1
+[16:34:16] 2. m1.sealedcalls-towhid.testnet registers key NZdXD01wGObMsmOezwSOpLY9Qb07QSgzCGr1FUf5A2k=
+    │    Transaction ID: GDDdgyiSTm4gL33YtQFJdvja41dD5x1Fqz2Z4gGGkyey
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"key_registered","data":[{"club":1,"member":"m1.sealedcalls-towhid.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[16:34:20] 3. seal + post_call (members: [{"member":"m1.sealedcalls-towhid.testnet","pubkey":"NZdXD01wGObMsmOezwSOpLY9Qb07QSgzCGr1FUf5A2k="}])
+{"commit":"da852f7d1b554ca838f2f8238acce9d81138a1e5dc9319f79dce3141de7feb7a","reveal_round":33755519,"tlock_bytes":792,"wrapped":1}
+    │    Transaction ID: FqmB2F5BoD9AT26bk8GFiMoihRxckKTtMzrw7QU12tks
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"call_posted","data":[{"club":1,"call":0,"caller":"caller.sealedcalls-towhid.testnet","epoch":0,"horizon_min":10,"opens_at_ms":1794069862338,"reveal_round":33755519,"commit":"da852f7d1b554ca838f2f8238acce9d81138a1e5dc9319f79dce3141de7feb7a"}]}
+    Function execution return value (printed to stdout):
+[16:34:29]    call 0: status "Sealed", opens at 2026-11-07T16:44:22.338Z
+[16:34:29] 4. member decrypts now: {"plaintext":"{\"v\":1,\"club\":1,\"caller\":\"caller.sealedcalls-towhid.testnet\",\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"horizon_min\":10,\"salt\":\"c925b374e682b67d378d9cc95c60df08\"}","matches":true}
+[16:34:30]    public tlock-open now (must fail): ERROR: It's too early to decrypt the ciphertext - decryptable at round 33755519
+[16:34:30]    early reveal attempt (must fail):
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: 5qEZ2qKYqRYNd8EHLywgH1Zx6pBZxWVoFMRk1mLnhALH
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:406:9:\ncall is still within its horizon")[0m
+[16:34:33] 5. waiting for the horizon and drand round (~11 min)
+beacon received: {"round":33755519,"randomness":"6eb2936689757f14412fff284c3eb427102a596c47de90bfca566bef1453ee26","signature":"b2aeba4f8d019ccc2356d2ad7553d674f4f41401564b4f6307b494b866618dd2b0a6751fc49b440d66e42e04b6baf98c"}
+[16:45:44]    tlock-open: {"plaintext":"{\"v\":1,\"club\":1,\"caller\":\"caller.sealedcalls-towhid.testnet\",\"mint\":\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\",\"horizon_min\":10,\"salt\":\"c925b374e682b67d378d9cc95c60df08\"}","matches":true}
+    │    Transaction ID: 5tAK6cAYButjQhZVdfQT5r1THNpQu2JNDJMcMhiaXCqb
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"call_revealed","data":[{"call":0,"club":1,"caller":"caller.sealedcalls-towhid.testnet","mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.sealedcalls-towhid.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[16:45:52]    status after reveal: {"Revealed":{"mint":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","by":"m2.sealedcalls-towhid.testnet","at_ms":1794069946217}}
+[16:49:43] 6. settle epoch 0 via OutLayer (caller balance before: Native account balance             0.9838273317835041 NEAR )
+    │    Transaction ID: 3S61zwA81XQBiMXY8Be4nUzwyoaCJwUvTYMmedFXoD9P
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"settle_requested","data":[{"club":1,"epoch":0,"calls":[0]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":12291,\"sender_id\":\"sealedcalls-towhid.testnet\",\"predecessor_id\":\"app.sealedcalls-towhid.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/sealed-calls/de5cd94292c94baafdfcfdaad0cb711d513884c0/scorer.wasm\",\"hash\":\"5dfa071911302f1e0f1827bd073e55cb38b00ebf60570ec08f4754bf6a6f2ec2\",\"build_target\":\"wasm32-wasip2\"}},\"resource_limits\":{\"max_instructions\":10000000000,\"max_memory_mb\":256,\"max_execution_seconds\":120},\"input_data\":\"{\\\"calls\\\":[{\\\"id\\\":0,\\\"mint\\\":\\\"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\\\",\\\"posted_at_ms\\\":1794069262338,\\\"horizon_min\\\":10}],\\\"reference_usd\\\":500,\\\"liquidity_floor_usd\\\":100000}\",\"input_data_in_state\":false,\"secrets_ref\":null,\"response_format\":\"Json\",\"payment\":\"500000000000000000000000\",\"attached_usd\":\"0\",\"timestamp\":1794070186197119968,\"compile_only\":false,\"force_rebuild\":false,\"store_on_fastfs\":false,\"use_bound_identity\":false,\"project_uuid\":null,\"project_id\":null}","data_id":[196,149,176,147,75,194,216,252,66,117,143,135,130,221,49,56,44,6,122,24,27,164,222,231,65,53,4,14,131,198,45,21],"timestamp":1794070186197119968}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"sealedcalls-towhid.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/de5cd94292c94baafdfcfdaad0cb711d513884c0/scorer.wasm","hash":"5dfa071911302f1e0f1827bd073e55cb38b00ebf60570ec08f4754bf6a6f2ec2","build_target":"wasm32-wasip2"}},"resources_used":{"instructions":4814279,"time_ms":9652,"compile_time_ms":1205},"success":true,"error_message":null,"payment_charged":"2085700400000000000000","payment_refunded":"497914299600000000000000","compilation_note":"Freshly compiled","timestamp":1794070202535887531}]}
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"1.0.0","event":"epoch_settled","data":[{"club":1,"epoch":0,"budget":"1000000000000000000000000","paid":"0"}]}
+    Function execution return value (printed to stdout):
+[16:50:06]    epoch result: {"status":"Settled","budget":"1000000000000000000000000","paid":"0","callers":[{"caller":"caller.sealedcalls-towhid.testnet","calls":1,"sum_bps":-147,"score_bps":-24,"eligible":false,"paid":"0"}],"settled_at_ms":1794070203115}
+[16:50:07]    call after scoring: {"score_bps":-147,"note":"median"}
+[16:50:08]    caller balance after: Native account balance             0.9838273317835041 NEAR 
+[16:50:08] E2E PASS
