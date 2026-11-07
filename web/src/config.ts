@@ -2,7 +2,7 @@
 const q = new URLSearchParams(window.location.search);
 
 export const NETWORK = "testnet" as const;
-export const CONTRACT = q.get("contract") ?? (import.meta.env.VITE_CONTRACT as string | undefined) ?? "app.sealedcalls-towhid.testnet";
+export const CONTRACT = q.get("contract") ?? (import.meta.env.VITE_CONTRACT as string | undefined) ?? "app.to69.testnet";
 export const CLUB = Number(q.get("club") ?? import.meta.env.VITE_CLUB ?? 0);
 export const RPCS = ["https://test.rpc.fastnear.com", "https://rpc.testnet.near.org"];
 export const EXPLORER = "https://testnet.nearblocks.io";

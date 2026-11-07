@@ -60,6 +60,13 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 | Function-call keys / gas keys (NEP-611) | keeper for reveal/settle | |
 | drand quicknet + tlock-js 0.9.0 | sealing | `mainnetClient()` is pinned to quicknet (chain hash 52db9ba7…), 3 s rounds, 12-of-22 threshold |
 
+## Accounts (Nov 7)
+
+- Testnet owner: **`to69.testnet`** (the user's). Its private key is the repo secret `NEAR_PRIVATE_KEY`; the workflow derives the public key and refuses to sign unless it is a full-access key of `to69.testnet` (`scripts/pubkey.mjs`, `preflight` in `scripts/testnet.sh`).
+- Contract: `app.to69.testnet`; demo members `m1.to69.testnet`, `m2.to69.testnet`; calls are posted by `to69.testnet` itself.
+- **Never put a mainnet key in GitHub secrets.** The user's mainnet account is `to69.near`; mainnet is out of scope and, if ever done, runs from a key that is not stored on GitHub.
+- Old generated accounts `sealedcalls-towhid.testnet` (+ app/caller/m2 sub-accounts) are abandoned test leftovers.
+
 ## Status (Nov 7, evening)
 
 - Work continues in the claude.ai cloud session. Its sandbox reaches GitHub only, so all network work (gates, wasm builds, deploys) runs in GitHub Actions (`.github/workflows/ci.yml`); results are pushed to the `results` branch, the built scorer wasm to the `dist` branch.

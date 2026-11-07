@@ -8,7 +8,7 @@
 # Env: MAIN, PUBKEY, SK (private key), SCORER_URL, SCORER_HASH (e2e)
 set -uo pipefail
 cd "$(dirname "$0")"
-APP="app.$MAIN"; CALLER="caller.$MAIN"; M1="m1.$MAIN"; M2="m2.$MAIN"
+APP="app.$MAIN"; CALLER="$MAIN"; M1="m1.$MAIN"; M2="m2.$MAIN"   # calls are posted by the owner account itself
 BONK="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
 # near-cli-rs (Nov 2026): the private key is positional; --signer-public-key was removed.
 SIGN=(sign-with-plaintext-private-key "$SK" send)
@@ -22,23 +22,34 @@ call() { # signer contract method json deposit
 view() { node sc.mjs view "$APP" "$1" "$2"; }
 wait_until() { local t=$1; while [ "$(date +%s)" -lt "$t" ]; do sleep 10; done; }
 
+# Refuse to sign anything unless the secret's key really is a full-access key of $MAIN on testnet.
+preflight() {
+  local r
+  r=$(curl -s https://rpc.testnet.near.org -H 'content-type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"query\",\"params\":{\"request_type\":\"view_access_key\",\"finality\":\"final\",\"account_id\":\"$MAIN\",\"public_key\":\"$PUBKEY\"}}")
+  if echo "$r" | grep -q '"FullAccess"'; then log "key check OK: $PUBKEY is a full-access key of $MAIN"; return 0; fi
+  log "STOP: $PUBKEY is not a full-access key of $MAIN on testnet. Put $MAIN's testnet private key in NEAR_PRIVATE_KEY."
+  echo "$r" | head -c 300; echo; exit 1
+}
+preflight
+
 case "$1" in
 accounts)
   exists "$MAIN" || near account create-account sponsor-by-faucet-service "$MAIN" use-manually-provided-public-key "$PUBKEY" network-config testnet create
-  FUND="sealedcalls-towhid-f$(date +%j%H).testnet"   # one funder per hour; the faucet gives ~10 NEAR each
+  FUND="scfund-${MAIN%%.*}-$(date +%j%H).testnet"   # one funder per hour; the faucet gives ~10 NEAR each
   exists "$FUND" || near account create-account sponsor-by-faucet-service "$FUND" use-manually-provided-public-key "$PUBKEY" network-config testnet create >/dev/null 2>&1 || log "funder faucet unavailable"
-  for f in "$FUND" "sealedcalls-towhid-f31116.testnet"; do   # also drain the funder from the first run
+  for f in "$FUND"; do
     if exists "$f" && bal "$f" | grep -qE "balance +[1-9][0-9]*(\.[0-9]+)? NEAR"; then
       sleep 3; near tokens "$f" send-near "$MAIN" '9.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error" | head -3; log "moved 9.5 NEAR from $f"
     fi
   done
   sleep 5
-  for spec in "$APP:5" "$CALLER:1" "$M1:0.5" "$M2:0.5"; do
+  for spec in "$APP:5" "$M1:0.5" "$M2:0.5"; do
     a="${spec%%:*}"; amt="${spec##*:} NEAR"
     if exists "$a"; then log "$a exists"; continue; fi
     near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
   done
-  for a in "$MAIN" "$APP" "$CALLER" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
+  for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
   ;;
 
 deploy)
@@ -111,7 +122,7 @@ J
   ;;
 
 status)
-  for a in "$MAIN" "$APP" "$CALLER" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
+  for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
   view get_club '{"club":0}'
   ;;
 *) echo "unknown action $1"; exit 1;;
