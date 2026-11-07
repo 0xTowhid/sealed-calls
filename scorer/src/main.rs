@@ -51,18 +51,26 @@ fn candles(pool: &str, mint: &str, before_s: u64, limit: u32) -> Result<Vec<Cand
     Ok(parse_candles(&get(&url)?))
 }
 
+/// GeckoTerminal's free API rate-limits hard (CI saw HTTP 429 after ~8 quick requests), so pace
+/// every request and back off on 429 before giving up.
 fn get(url: &str) -> Result<Value, String> {
-    let resp = Client::new()
-        .get(url)
-        .header("accept", "application/json")
-        .connect_timeout(Duration::from_secs(15))
-        .send()
-        .map_err(|e| format!("request failed: {e}"))?;
-    let status = resp.status();
-    let body = resp.body().map_err(|e| e.to_string())?;
-    match status {
-        200 => serde_json::from_slice(&body).map_err(|e| format!("bad json from {url}: {e}")),
-        404 => Ok(Value::Null), // unknown token or pool: rules turn this into −100%
-        s => Err(format!("http {s} from {url}")),
+    const TRIES: u64 = 5;
+    for attempt in 1..=TRIES {
+        std::thread::sleep(Duration::from_millis(2_500));
+        let resp = Client::new()
+            .get(url)
+            .header("accept", "application/json")
+            .connect_timeout(Duration::from_secs(15))
+            .send()
+            .map_err(|e| format!("request failed: {e}"))?;
+        let status = resp.status();
+        let body = resp.body().map_err(|e| e.to_string())?;
+        match status {
+            200 => return serde_json::from_slice(&body).map_err(|e| format!("bad json from {url}: {e}")),
+            404 => return Ok(Value::Null), // unknown token or pool: rules turn this into −100%
+            429 if attempt < TRIES => std::thread::sleep(Duration::from_secs(10 * attempt)),
+            s => return Err(format!("http {s} from {url}")),
+        }
     }
+    unreachable!()
 }

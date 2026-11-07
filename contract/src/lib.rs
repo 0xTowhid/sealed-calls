@@ -163,16 +163,16 @@ pub struct EpochResult {
 }
 
 /// One line of the scoring job's output.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json])]
+#[derive(Debug, Clone)]
 pub struct CallScore {
     pub id: u64,
     pub r_bps: i32,
     pub note: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json])]
+#[derive(Debug, Clone)]
 pub struct ScoreOut {
     pub ok: bool,
     pub results: Vec<CallScore>,
