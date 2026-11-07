@@ -1,0 +1,10 @@
+{
+  "name": "sealed-calls-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Client-side crypto and RPC helpers used by the testnet workflow (and later the web app)",
+  "dependencies": {
+    "libsodium-wrappers": "0.7.15",
+    "tlock-js": "0.9.0"
+  }
+}
