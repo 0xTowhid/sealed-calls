@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { signIn, signOut } from "./near";
-import { useAccount } from "./data";
+import { listChannels, signIn, signOut } from "./near";
+import { useAccount, useLoad } from "./data";
 import { Explore } from "./pages/Explore";
 import { ChannelPage } from "./pages/Channel";
 import { Feed } from "./pages/Feed";
@@ -19,7 +19,11 @@ function useRoute() {
 export default function App() {
   const route = useRoute();
   const account = useAccount();
-  const page = route[0] || "explore";
+  const channels = useLoad(listChannels, [], 60_000).data;
+  const mine = channels?.find((c) => c.creator === account) ?? null;
+  const at = route[0]?.startsWith("@") ? route[0].slice(1) : null;
+  const page = at ? (at === account ? "mine" : "c") : route[0] === "mine" ? "mine" : route[0] || "explore";
+  const atId = at ? channels?.find((c) => c.creator === at)?.id : undefined;
   const link = (to: string, href: string, label: string) => (
     <a href={href} className={page === to ? "on" : ""} aria-current={page === to ? "page" : undefined}>{label}</a>
   );
@@ -31,6 +35,7 @@ export default function App() {
         <nav className="nav" aria-label="Main">
           {link("explore", "#/", "Explore")}
           {link("feed", "#/feed", "My feed")}
+          {mine && link("mine", `#/@${mine.creator}`, "My channel")}
           {link("desk", "#/desk", "Creator desk")}
           {account ? (
             <>
@@ -44,7 +49,13 @@ export default function App() {
       </header>
 
       {page === "explore" && <Explore />}
-      {page === "c" && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
+      {page === "c" && !at && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
+      {(at || page === "mine") && (() => {
+        const id = at ? atId : mine?.id;
+        if (!channels) return <p className="empty">Reading channels…</p>;
+        if (id == null) return <div className="notice">{at ? `${at} doesn't have a channel yet.` : <>You don't have a channel yet. <a href="#/desk">Start one</a>.</>}</div>;
+        return <ChannelPage id={id} account={account} />;
+      })()}
       {page === "feed" && <Feed account={account} />}
       {page === "desk" && <Desk account={account} />}
 

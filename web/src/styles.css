@@ -244,3 +244,20 @@ table.record td:nth-child(4), table.record td:nth-child(5) { white-space: normal
 table.record th { padding: 8px 6px; }
 .keybox { margin-top: 14px; border-top: 1px dashed var(--rule); padding-top: 10px; }
 .keybox summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+
+/* creator view */
+.only { font-size: 11.5px; font-weight: 800; letter-spacing: .02em; background: var(--ink); color: var(--paper); padding: 2px 7px; border-radius: 2px; }
+.owner-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.owner-head .btn { white-space: nowrap; flex: none; }
+.share { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.share .url { font-family: "JetBrains Mono", monospace; font-size: 13px; border: 1.5px solid var(--ink); background: #fff; padding: 8px 10px; border-radius: 3px; overflow-wrap: anywhere; }
+.money { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.5px solid var(--ink); margin-top: 20px; }
+.money div { padding: 14px 14px 4px 0; }
+.money div + div { padding-left: 14px; border-left: 1px solid var(--rule); }
+.money b { display: block; font-weight: 900; font-stretch: 115%; font-size: 26px; line-height: 1.1; }
+.money span { font-size: 13px; color: var(--ink2); }
+.card.mini .tok { font-size: 22px; }
+.card.mini .levels b { font-size: 15px; }
+@media (max-width: 640px) { .money { grid-template-columns: 1fr 1fr; } .money div:nth-child(3) { border-left: 0; padding-left: 0; } .owner-head { flex-direction: column; } }
+.card.mini .levels { grid-template-columns: 1fr 1fr; }
+.card.mini .levels div:nth-child(odd) { border-left: 0; padding-left: 0; }

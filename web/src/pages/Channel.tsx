@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getMember, getPeriod, periodHeld, subscribers } from "../near";
 import { record, useLoad, useNow } from "../data";
 import { day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
-import { tlockOpen, roundTimeMs } from "../crypto";
-import { Act, Outcome, Result, SideTag } from "../ui";
-import { venueLabel } from "../markets";
+import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
+import { Act, Countdown, Outcome, Result, SideTag, rangeState } from "../ui";
+import { priceOf, venueLabel } from "../markets";
 import { GAS_300, NEAR } from "../config";
-import type { PeriodResult, Signal } from "../types";
+import type { Channel, PeriodResult, Signal } from "../types";
 import { isSealed, opensAt } from "../types";
 
 async function load(id: number, account: string | null) {
@@ -27,7 +27,17 @@ async function load(id: number, account: string | null) {
       return { p, r, held, signals: signals.filter((s) => s.period === p).length };
     }),
   );
-  return { ch, cfg, signals, subs: subs.length, cur, member, claim, periods };
+  // For the creator: NEAR still held for periods that haven't settled yet.
+  let heldAhead = 0n;
+  if (account === ch.creator) {
+    const from = ch.created_at_ms + ch.next_period * cfg.period_minutes * 60_000;
+    const members = await Promise.all(subs.map(([a]) => getMember(id, a)));
+    for (const m of members) for (const sb of m?.subs ?? []) {
+      const len = BigInt(sb.end_ms - sb.start_ms), over = BigInt(Math.max(0, sb.end_ms - Math.max(sb.start_ms, from)));
+      if (len > 0n) heldAhead += (BigInt(sb.held) * over) / len;
+    }
+  }
+  return { ch, cfg, signals, subs: subs.length, readers: subs.filter((x) => x[2]).map((x) => x[0]), cur, member, claim, periods, heldAhead };
 }
 
 export function ChannelPage({ id, account }: { id: number; account: string | null }) {
@@ -36,7 +46,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
   const [plan, setPlan] = useState<number | null>(null);
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading the channel from NEAR testnet…</p>;
-  const { ch, cfg, signals, subs, cur, member, claim, periods } = data;
+  const { ch, cfg, signals, subs, readers, cur, member, claim, periods, heldAhead } = data;
   const rec = record(ch, signals);
   const word = periodWord(cfg.period_minutes);
   const periodMs = cfg.period_minutes * 60_000;
@@ -63,14 +73,28 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
     <div className="g-main">
       <div>
         <section className="sheet">
-          <div className="sub0 small">{ch.creator} · creator since {day(ch.created_at_ms)}</div>
-          <h1 className="display m">{ch.name}</h1>
-          {ch.about && <p className="lede">{ch.about}</p>}
+          <div className="owner-head">
+            <div>
+              <div className="sub0 small">{ch.creator} · creator since {day(ch.created_at_ms)}{isCreator && <> · <span className="only">YOUR CHANNEL</span></>}</div>
+              <h1 className="display m">{ch.name}</h1>
+              {ch.about && <p className="lede">{ch.about}</p>}
+            </div>
+            {isCreator && <a className="btn" href="#/desk">+ New signal</a>}
+          </div>
+          {isCreator && <ShareRow ch={ch} />}
+          {isCreator && (
+            <div className="money">
+              <div><b>{nearNum(ch.stats.earned).toLocaleString(undefined, { maximumFractionDigits: 3 })}</b><span>NEAR paid to you</span></div>
+              <div><b>{nearNum(heldAhead).toLocaleString(undefined, { maximumFractionDigits: 3 })}</b><span>NEAR held for coming {word}s</span></div>
+              <div><b className={ch.stats.periods_released ? "gain" : ""}>{ch.stats.periods_released}</b><span>{word}s earned of {ch.stats.periods_released + ch.stats.periods_refunded} settled</span></div>
+              <div><b>{subs} / {ch.max_members}</b><span>subscribers</span></div>
+            </div>
+          )}
           <div className="bigstats">
             <div><b>{rec.signals}</b><span>signals</span></div>
             <div><b>{rec.winRate == null ? "—" : `${rec.winRate}%`}</b><span>win rate (filled)</span></div>
             <div><b className={(rec.score_bps ?? 0) > 0 ? "gain" : (rec.score_bps ?? 0) < 0 ? "loss" : ""}>{pct(rec.score_bps)}</b><span>score</span></div>
-            <div><b>{rec.periodsSettled ? `${rec.periodsEarned} of ${rec.periodsSettled}` : "—"}</b><span>{word}s earned</span></div>
+            {!isCreator && <div><b>{rec.periodsSettled ? `${rec.periodsEarned} of ${rec.periodsSettled}` : "—"}</b><span>{word}s earned</span></div>}
             <div><b>{rec.notFilled}</b><span>never filled</span></div>
           </div>
         </section>
@@ -118,12 +142,12 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
       </div>
 
       <div>
-        <section className="sheet">
+        {isCreator && <OwnerLive signals={signals} readers={readers} account={account!} now={now} />}
+        {isCreator && <EditChannel ch={ch} onDone={reload} />}
+        {!isCreator && <section className="sheet">
           <h2>{active ? "Your subscription" : "Subscribe"}</h2>
           {active && <p className="notice ok-n">Active until <b>{when(member!.until_ms)}</b>. Signals appear in <a href="#/feed">My feed</a>. You can extend below.</p>}
-          {isCreator ? (
-            <p className="sub">This is your channel. Post from the <a href="#/desk">creator desk</a>.</p>
-          ) : (
+          {(
             <>
               <div className="plans" role="group" aria-label="Plans">
                 {ch.plans.map((pl, i) => (
@@ -154,7 +178,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               <Act className="btn small" label="Claim" run={async () => { await call("claim_refund", { channel: id }); await reload(); }} />
             </div>
           )}
-        </section>
+        </section>}
 
         <section className="sheet">
           <h2>{word[0].toUpperCase() + word.slice(1)} by {word}</h2>
@@ -190,5 +214,130 @@ function PeriodRow({ p, r, held, n, start, periodMs, cur, next }: { p: number; r
       <td className="n">{near(settled ? r!.held : held)}</td>
       <td className="n">{settled ? <b>{r!.released ? "Creator" : "Subscribers"}</b> : <span className="sub0">{p === cur ? "open" : p >= next ? "to settle" : "settling"}</span>}</td>
     </tr>
+  );
+}
+
+// ------------------------------------------------------------------ creator view
+
+const appUrl = () => window.location.href.split("#")[0].split("?")[0];
+
+function ShareRow({ ch }: { ch: Channel }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${appUrl()}#/@${ch.creator}`;
+  const text = `My trading signals are sealed on @NEARProtocol: subscribers see them first, everyone sees the scored result after. Nothing can be deleted. ${url}`;
+  return (
+    <div className="share">
+      <span className="sub0 small">Share your channel</span>
+      <code className="url">{url.replace(/^https?:\/\//, "")}</code>
+      <button className="btn ghost small" onClick={async () => { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? "Copied" : "Copy link"}</button>
+      <a className="btn ghost small" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">Post on X</a>
+    </div>
+  );
+}
+
+function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; readers: string[]; account: string; now: number }) {
+  const live = signals.filter((s) => isSealed(s) && opensAt(s) > now);
+  const [open, setOpen] = useState<Record<number, Opened | null>>({});
+  const [prices, setPrices] = useState<Record<number, number | null>>({});
+  useEffect(() => {
+    const secret = creatorSecret(account);
+    if (!secret) return;
+    for (const s of live) {
+      if (s.id in open) continue;
+      signalKey(secret, s.commit).then((k) => openWithKey(s, k)).then((o) => setOpen((x) => ({ ...x, [s.id]: o })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.map((s) => s.id).join(","), account]);
+  useEffect(() => {
+    const tick = () => Object.entries(open).forEach(([id, o]) => o?.body && priceOf(o.body.market).then((p) => setPrices((x) => ({ ...x, [Number(id)]: p }))));
+    tick();
+    const t = setInterval(tick, 20_000);
+    return () => clearInterval(t);
+  }, [open]);
+  return (
+    <section className="sheet">
+      <div className="row-between"><h2>Your live signals</h2><span className="only">ONLY YOU</span></div>
+      <p className="sub">Decrypted with your creator key, in this browser.</p>
+      {live.length === 0 && <p className="sub0">Nothing live. <a href="#/desk">Post a signal</a>.</p>}
+      {live.map((s) => {
+        const o = open[s.id];
+        const b = o?.body;
+        const have = s.wrapped_keys.filter((w) => readers.includes(w.member)).length;
+        return (
+          <div className="card fresh mini" key={s.id}>
+            <div className="tape" />
+            <div className="hd"><span>{when(s.posted_at_ms)}</span><span>public in <Countdown to={opensAt(s)} now={now} /></span></div>
+            <div className="bd">
+              {b ? (
+                <>
+                  <div className="face m"><div className="tok"><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</div></div>
+                  <div className="levels">
+                    <div><span>{b.side === "short" ? "Sell" : "Buy"}</span><b>{price(b.entry_low)}–{price(b.entry_high)}</b></div>
+                    <div><span>TP</span><b>{b.tps.map(price).join(" · ")}</b></div>
+                    <div><span>SL</span><b>{price(b.sl)}</b></div>
+                    <div><span>Now</span><b>{prices[s.id] != null ? price(String(Number(prices[s.id]!.toPrecision(6)))) : "—"}</b></div>
+                  </div>
+                  <div className="small" style={{ marginTop: 10 }}>
+                    <span className={have >= readers.length ? "gain" : "loss"}><b>{have >= readers.length ? "✓ " : ""}{have} of {readers.length} subscribers</b></span> have it
+                    {prices[s.id] != null && <> · {rangeState(b, prices[s.id]!)}</>}
+                  </div>
+                </>
+              ) : o === null ? (
+                <p className="sub0">Posted from another browser or before late access: this browser's creator key can't open it. It opens for everyone when it ends.</p>
+              ) : creatorSecret(account) ? (
+                <p className="sub0">Decrypting…</p>
+              ) : (
+                <p className="sub0">This browser has no creator key. Post from here, or paste your key on the <a href="#/desk">creator desk</a>.</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+const DURATIONS = [7, 14, 30, 180, 365];
+
+function EditChannel({ ch, onDone }: { ch: Channel; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(ch.name);
+  const [about, setAbout] = useState(ch.about);
+  const [max, setMax] = useState(String(ch.max_members));
+  const days = [...new Set([...DURATIONS, ...ch.plans.map((p) => p.days)])].sort((a, b) => a - b).slice(0, 6);
+  const [prices, setPrices] = useState<Record<number, string>>(Object.fromEntries(days.map((d) => [d, (() => { const p = ch.plans.find((x) => x.days === d); return p ? String(nearNum(p.price)) : ""; })()])));
+  return (
+    <section className="sheet">
+      <h2>Subscribe</h2>
+      <p className="sub">Visitors see your plans here: {ch.plans.map((p) => `${near(p.price)} / ${planName(p.days)}`).join(", ")}.</p>
+      {!open ? (
+        <button className="btn ghost wide" onClick={() => setOpen(true)}>Edit plans and description</button>
+      ) : (
+        <div>
+          <label htmlFor="en">Channel name</label>
+          <input id="en" type="text" maxLength={48} value={name} onChange={(e) => setName(e.target.value)} />
+          <label htmlFor="ea">What you post</label>
+          <textarea id="ea" maxLength={400} value={about} onChange={(e) => setAbout(e.target.value)} />
+          <label>Prices in NEAR <span className="sub0">(empty = no such plan; new prices apply to new subscriptions)</span></label>
+          <div className="plan-edit">
+            {days.map((d) => (
+              <div key={d}><span>{planName(d)}</span><input type="text" inputMode="decimal" value={prices[d] ?? ""} onChange={(e) => setPrices({ ...prices, [d]: e.target.value })} /></div>
+            ))}
+          </div>
+          <label htmlFor="em">Most subscribers at once</label>
+          <input id="em" type="text" inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value.replace(/\D/g, ""))} />
+          <div className="two" style={{ marginTop: 14 }}>
+            <button className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <Act label="Save changes" busyLabel="Waiting for the wallet…" disabled={!name.trim() || !days.some((d) => Number(prices[d]) > 0)}
+              run={async () => {
+                const plans = days.filter((d) => Number(prices[d]) > 0).map((d) => ({ days: d, price: NEAR(Number(prices[d])) }));
+                await call("update_channel", { channel: ch.id, name: name.trim(), about: about.trim(), plans, max_members: Math.min(100, Math.max(1, Number(max) || 1)) });
+                setOpen(false);
+                onDone();
+              }} />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
