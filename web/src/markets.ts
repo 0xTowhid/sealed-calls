@@ -17,8 +17,8 @@ async function hl(): Promise<HlMeta> {
   return hlCache;
 }
 
-const MAJORS = new Set(["SOL", "WSOL", "USDC", "USDT", "ETH", "WETH", "BNB", "WBNB", "BTC", "WBTC", "CBBTC", "AVAX", "WAVAX", "POL", "WPOL", "MATIC", "WMATIC", "ARB", "S", "WS", "SUI", "TON", "TRX", "USDE", "DAI", "USDC.E", "USDBC", "FDUSD", "PYUSD"]);
-const NETWORK_NAMES: Record<string, string> = { solana: "Solana", eth: "Ethereum", base: "Base", bsc: "BNB Chain", arbitrum: "Arbitrum", polygon_pos: "Polygon", avax: "Avalanche", sonic: "Sonic", ton: "TON", sui: "Sui" };
+const MAJORS = new Set(["SOL", "WSOL", "USDC", "USDT", "ETH", "WETH", "BNB", "WBNB", "BTC", "WBTC", "CBBTC", "AVAX", "WAVAX", "POL", "WPOL", "MATIC", "WMATIC", "ARB", "S", "WS", "SUI", "TON", "TRX", "USDE", "DAI", "USDC.E", "USDBC", "FDUSD", "PYUSD", "USDG"]);
+const NETWORK_NAMES: Record<string, string> = { robinhood: "Robinhood Chain", solana: "Solana", eth: "Ethereum", base: "Base", bsc: "BNB Chain", arbitrum: "Arbitrum", polygon_pos: "Polygon", avax: "Avalanche", sonic: "Sonic", ton: "TON", sui: "Sui" };
 export const networkName = (n?: string | null) => (n ? NETWORK_NAMES[n] ?? n : "");
 
 export function venueLabel(m: Market) {
@@ -29,7 +29,7 @@ export type Search = { results: Found[]; note: string | null };
 
 const isSolAddr = (q: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
 const isEvmAddr = (q: string) => /^0x[0-9a-fA-F]{40}$/.test(q);
-const EVM_NETS = ["eth", "base", "bsc", "arbitrum"];
+const EVM_NETS = ["eth", "base", "bsc", "arbitrum", "robinhood"];
 
 /** Pools of one token on one network, paired with a major; best (deepest) as a Found. */
 async function tokenOnNetwork(net: string, addr: string): Promise<Found | "none" | "limited"> {
@@ -73,7 +73,7 @@ export async function searchMarkets(q: string): Promise<Search> {
     }
     const note = out.length ? null : limited
       ? "GeckoTerminal is rate-limiting this browser. Wait a minute and try again."
-      : "No pool for this token paired with SOL, ETH, USDC or USDT was found. Sealed Calls only scores tokens with such a pool.";
+      : "No pool for this token paired with SOL, ETH, USDC, USDT or USDG was found (checked Solana, Ethereum, Base, BNB Chain, Arbitrum and Robinhood Chain). Sealed Calls only scores tokens with such a pool.";
     return { results: out, note };
   }
 

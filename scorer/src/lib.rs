@@ -27,7 +27,7 @@ pub const GT_MAX_CANDLES: u64 = 3_000;
 /// Quote assets a DEX pool must be paired with to count (wrapped natives and stablecoins).
 pub const MAJORS: &[&str] = &[
     "SOL", "WSOL", "USDC", "USDT", "ETH", "WETH", "BNB", "WBNB", "BTC", "WBTC", "CBBTC", "AVAX", "WAVAX", "POL", "WPOL", "MATIC",
-    "WMATIC", "ARB", "S", "WS", "SUI", "TON", "TRX", "USDE", "DAI", "USDC.E", "USDBC", "FDUSD", "PYUSD",
+    "WMATIC", "ARB", "S", "WS", "SUI", "TON", "TRX", "USDE", "DAI", "USDC.E", "USDBC", "FDUSD", "PYUSD", "USDG",
 ];
 
 #[derive(Deserialize, Debug, Clone)]
