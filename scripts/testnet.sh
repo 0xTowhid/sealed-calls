@@ -62,6 +62,23 @@ reveal_all() {
   done
 }
 
+# Official scores as soon as signals end (no waiting for the period): score_signals on OutLayer.
+score_ended() {
+  local C=$1 CH=$2 IDS LEFT
+  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
+  IDS=$(js "const now=Date.now();const ids=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).map(s=>s.id).slice(0,10);console.log(ids.join(','))")
+  if [ -n "$IDS" ]; then
+    log "channel $CH: scoring signals [$IDS] on OutLayer"
+    call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | cut -c1-300
+    for i in $(seq 1 12); do
+      sleep 10
+      LEFT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];console.log(JSON.parse(s).filter(x=>want.includes(x.id)&&x.r_bps==null).length)})")
+      [ "$LEFT" = 0 ] && break
+    done
+    view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];for(const x of JSON.parse(s).filter(x=>want.includes(x.id)))console.log('    signal',x.id,x.body.market.symbol,x.r_bps==null?'not scored yet':(x.r_bps/100)+'% '+x.outcome)})"
+  fi
+}
+
 # Keeper pass for channel $2 on $1: reveal every ended signal drand can open (no waiting), mark
 # signals still unopened after the grace period, then settle every ended period.
 keep_channel() {
@@ -81,19 +98,7 @@ keep_channel() {
       log "channel $CH signal $ID: ended but its drand copy doesn't open; waiting for the grace period"
     fi
   done
-  # Official scores as soon as signals end (no waiting for the day to settle).
-  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
-  IDS=$(js "const now=Date.now();const ids=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).map(s=>s.id).slice(0,10);console.log(ids.join(','))")
-  if [ -n "$IDS" ]; then
-    log "channel $CH: scoring signals [$IDS] on OutLayer"
-    call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | cut -c1-300
-    for i in $(seq 1 12); do
-      sleep 10
-      LEFT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];console.log(JSON.parse(s).filter(x=>want.includes(x.id)&&x.r_bps==null).length)})")
-      [ "$LEFT" = 0 ] && break
-    done
-    view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];for(const x of JSON.parse(s).filter(x=>want.includes(x.id)))console.log('    signal',x.id,x.body.market.symbol,x.r_bps==null?'not scored yet':(x.r_bps/100)+'% '+x.outcome)})"
-  fi
+  score_ended "$C" "$CH"
   settle_ready "$C" "$CH" || log "channel $CH: settlement not finished this round"
 }
 
@@ -182,6 +187,9 @@ e2e)
   cleanup() { log "deleting $C (NEAR back to $MAIN)"; near account delete-account "$C" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2; }
   trap cleanup EXIT
 
+  for a in "$M1" "$M2"; do   # members need ~0.6 NEAR for a 0.25 NEAR subscription plus gas reserve
+    if ! bal "$a" | grep -qE "balance +([1-9]|0\.[6-9])"; then near tokens "$MAIN" send-near "$a" '0.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2; fi
+  done
   log "1. $MAIN creates a channel: 1 day for 0.2 NEAR, 7 days for 1 NEAR"
   call "$MAIN" "$C" create_channel '{"name":"E2E desk","about":"test","plans":[{"days":1,"price":"200000000000000000000000"},{"days":7,"price":"1000000000000000000000000"}],"max_members":25}' '0.05 NEAR'
   log "2. $M1 subscribes (1 day) and registers a key; $M2 subscribes without a key"
@@ -201,14 +209,27 @@ e2e)
   sleep 3; view get_signal '{"signal_id":0}' > /tmp/s0.json || { log "FAIL no signal"; exit 1; }
   log "4. member reads it now: $(node sc.mjs member-open /tmp/s0.json "$M1" /tmp/m1.key)"
   log "   public tlock-open now (must fail): $(node sc.mjs tlock-open /tmp/s0.json 2>&1 | head -c 120)"
+  log "4b. late access: $M2 sets up a key only now; the creator shares the live signal with them"
+  PUB2=$(node sc.mjs member-keygen /tmp/m2.key)
+  call "$M2" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB2\"}" '0 NEAR'
+  W2=$(node sc.mjs wrap /tmp/post.json.key "$PUB2")
+  call "$MAIN" "$C" share_signals "{\"items\":[[0,[{\"member\":\"$M2\",\"key\":\"$W2\"}]]]}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-200
+  sleep 3; view get_signal '{"signal_id":0}' > /tmp/s0.json
+  LATE=$(node sc.mjs member-open /tmp/s0.json "$M2" /tmp/m2.key)
+  log "   late subscriber reads it: $LATE"
+  echo "$LATE" | grep -q '"matches":true' || { log "E2E FAIL late access"; exit 1; }
   log "   early reveal (must fail):"; call "$M2" "$C" reveal "{\"signal_id\":0,\"plaintext\":$(js "console.log(JSON.stringify(require('fs').readFileSync('/tmp/post.json.plaintext','utf8')))")}" '0 NEAR'
 
   log "5. after validity, anyone reveals from drand"
   reveal_all "$C" 0
   log "   revealed: $(view get_signal '{"signal_id":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);console.log(JSON.stringify({status:x.status,body:x.body}))})")"
 
+  log "5b. official score right after the end (score_signals on OutLayer)"
+  score_ended "$C" 0
+  view get_signal '{"signal_id":0}' | grep -q '"r_bps":null' && { log "E2E FAIL: not scored after the end"; exit 1; }
+
   PEND=$(view get_channel '{"channel":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(Math.ceil(c.created_at_ms/1000)+20*60+15)})")
-  log "6. wait for period 0 to end ($(( PEND - $(date +%s) ))s), then settle via OutLayer"; wait_until "$PEND"
+  log "6. wait for period 0 to end ($(( PEND - $(date +%s) ))s), then settle (scores already on-chain: no OutLayer call)"; wait_until "$PEND"
   settle_ready "$C" 0 || { log "E2E FAIL at settle"; exit 1; }
   log "   signal after scoring: $(view get_signal '{"signal_id":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);console.log(JSON.stringify({r_bps:x.r_bps,outcome:x.outcome,fill:x.fill_price,exit:x.exit_price,cost_bps:x.cost_bps}))})")"
   log "   channel stats: $(view get_channel '{"channel":0}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s).stats)))")"

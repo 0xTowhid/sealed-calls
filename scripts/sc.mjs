@@ -4,6 +4,7 @@
 //   node sc.mjs seal <channel> <creator> <signalJson> <valid_min> <readersJson> <outfile>
 //        readersJson: the contract's readers_now output [["m1.x.testnet","<b64>"], ...]
 //        -> writes post_signal args to <outfile> and the plaintext to <outfile>.plaintext
+//   node sc.mjs wrap <signalKeyFile> <memberPubkey>             -> wrapped key for share_signals (late access)
 //   node sc.mjs member-open <callJson> <member> <memberKeyFile>  -> prints plaintext, checks commitment
 //   node sc.mjs tlock-open <callJson>                          -> prints plaintext once the drand round has passed
 import { timelockEncrypt, timelockDecrypt, roundAt, mainnetClient, Buffer } from "tlock-js";
@@ -57,7 +58,7 @@ export async function seal({ channel, creator, validMin, signal, members, latenc
   const box = sodium.crypto_secretbox_easy(sodium.from_string(plaintext), nonce, callKey);
   const member_ct = b64(new Uint8Array([...nonce, ...box]));
   const wrapped_keys = members.map((x) => ({ member: x.member, key: b64(sodium.crypto_box_seal(callKey, unb64(x.pubkey))) }));
-  return { args: { channel, valid_min: validMin, commit, reveal_round: round, tlock_ct, member_ct, wrapped_keys }, plaintext };
+  return { args: { channel, valid_min: validMin, commit, reveal_round: round, tlock_ct, member_ct, wrapped_keys }, plaintext, key: b64(callKey) };
 }
 
 export async function memberOpen(call, member, keypair) {
@@ -94,7 +95,12 @@ try {
     const r = await seal({ channel: Number(a[0]), creator: a[1], signal: JSON.parse(a[2]), validMin: Number(a[3]), members });
     writeFileSync(a[5], JSON.stringify(r.args));
     writeFileSync(a[5] + ".plaintext", r.plaintext);
+    writeFileSync(a[5] + ".key", r.key); // the signal key: lets the creator share it with late subscribers
     out({ commit: r.args.commit, reveal_round: r.args.reveal_round, tlock_bytes: r.args.tlock_ct.length, wrapped: r.args.wrapped_keys.length });
+  } else if (cmd === "wrap") {
+    // wrap <signalKeyFile> <memberPubkeyB64> -> the signal key sealed to that member (for share_signals)
+    await sodium.ready;
+    out(b64(sodium.crypto_box_seal(unb64(readFileSync(a[0], "utf8").trim()), unb64(a[1]))));
   } else if (cmd === "member-open") {
     out(await memberOpen(JSON.parse(readFileSync(a[0], "utf8")), a[1], JSON.parse(readFileSync(a[2], "utf8"))));
   } else if (cmd === "tlock-open") {
