@@ -545,3 +545,61 @@ fn no_sharing_after_validity() {
     ctx("alice.testnet", T0_MS + 10_000 + 60 * 60_000, 0);
     c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }])]);
 }
+
+// ------------------------------------------------------------------ score as soon as signals end
+
+#[test]
+fn signals_get_official_scores_before_the_period_settles() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    c.reveal(a, pa);
+    ctx("keeper.testnet", T0_MS + 2 * 60 * 60_000 + 5, near(1) / 2);
+    let _ = c.score_signals(vec![a]);
+    assert!(logs_have("scoring_requested"));
+    ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10_000, 0);
+    assert_eq!(c.on_signal_scores(vec![a], ok(vec![score(a, 1500, "tp1")])), 1);
+    assert_eq!(c.get_signal(a).unwrap().r_bps, Some(1500));
+    // settlement then needs no OutLayer call and uses that score
+    ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 2);
+    let r = match c.settle(0) {
+        PromiseOrValue::Value(Some(r)) => r,
+        _ => panic!("expected an immediate settlement"),
+    };
+    assert!(r.released);
+    assert_eq!(r.sum_bps, 1500);
+}
+
+#[test]
+#[should_panic(expected = "already scored")]
+fn scoring_twice_is_refused() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    c.reveal(a, pa);
+    ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10_000, 0);
+    c.on_signal_scores(vec![a], ok(vec![score(a, 1500, "tp1")]));
+    ctx("keeper.testnet", T0_MS + 3 * 60 * 60_000, near(1) / 2);
+    let _ = c.score_signals(vec![a]);
+}
+
+#[test]
+#[should_panic(expected = "is not revealed")]
+fn sealed_signals_cannot_be_scored() {
+    let mut c = setup();
+    let (a, _) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("keeper.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 2);
+    let _ = c.score_signals(vec![a]);
+}
+
+#[test]
+fn failed_scoring_changes_nothing() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    c.reveal(a, pa);
+    ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10_000, 0);
+    assert_eq!(c.on_signal_scores(vec![a], Ok(None)), 0);
+    assert!(c.get_signal(a).unwrap().r_bps.is_none());
+    assert!(logs_have("scoring_failed"));
+}

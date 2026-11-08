@@ -682,34 +682,67 @@ impl SealedCalls {
             return PromiseOrValue::Value(Some(self.finish_period(channel, period)));
         }
         assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
-        let input: Vec<_> = to_score
-            .iter()
-            .map(|id| {
-                let s = self.signals.get(*id as u32).unwrap();
-                let b = s.body.as_ref().unwrap();
-                json!({
-                    "id": id, "venue": b.market.venue, "network": b.market.network, "address": b.market.address,
-                    "side": b.side, "leverage": b.leverage, "entry_low": b.entry_low, "entry_high": b.entry_high,
-                    "tps": b.tps, "sl": b.sl, "posted_at_ms": s.posted_at_ms, "valid_min": s.valid_min,
-                })
-            })
-            .collect();
         self.periods.insert(
             (channel, period),
             PeriodResult { status: PeriodStatus::Settling, signals: 0, sum_bps: 0, score_bps: 0, released: false, held: NearToken::from_yoctonear(0), settled_at_ms: 0 },
         );
         emit("settle_requested", json!({ "channel": channel, "period": period, "signals": to_score }));
-        let cfg = &self.config;
-        let source = json!({ "WasmUrl": { "url": cfg.scorer_wasm_url, "hash": cfg.scorer_wasm_hash, "build_target": "wasm32-wasip2" } });
-        let limits = json!({ "max_instructions": 10_000_000_000u64, "max_memory_mb": 256u32, "max_execution_seconds": 180u64 });
-        let job = json!({ "signals": input, "reference_usd": cfg.reference_usd, "liquidity_floor_usd": cfg.liquidity_floor_usd });
         PromiseOrValue::Promise(
-            ext_outlayer::ext(cfg.outlayer.clone())
-                .with_attached_deposit(deposit)
-                .with_unused_gas_weight(1)
-                .request_execution(source, Some(limits), Some(job.to_string()), None, Some("Json".into()), Some(env::predecessor_account_id()), None)
+            self.scoring_request(&to_score, deposit)
                 .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_scores(channel, period, to_score)),
         )
+    }
+
+    /// Official scores as soon as signals end, without waiting for the period to settle.
+    /// Anyone can call it (the keeper does) with up to 10 revealed, ended, unscored signals and a
+    /// deposit for OutLayer compute (unused part refunded by OutLayer). Settlement later uses these
+    /// scores as they are.
+    #[payable]
+    pub fn score_signals(&mut self, ids: Vec<u64>) -> Promise {
+        assert!(!ids.is_empty() && ids.len() <= 10, "1 to 10 signals per call");
+        let now = env::block_timestamp_ms();
+        let mut seen = ids.clone();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), ids.len(), "duplicate signal id");
+        for id in &ids {
+            let s = self.signals.get(*id as u32).expect("no such signal");
+            assert!(matches!(s.status, SignalStatus::Revealed { .. }), "signal {id} is not revealed");
+            assert!(s.body.is_some() && s.r_bps.is_none(), "signal {id} is already scored");
+            assert!(now >= opens_at(s), "signal {id} is still valid");
+        }
+        let deposit = env::attached_deposit();
+        assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
+        emit("scoring_requested", json!({ "signals": ids }));
+        self.scoring_request(&ids, deposit)
+            .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_signal_scores(ids))
+    }
+
+    #[private]
+    pub fn on_signal_scores(&mut self, ids: Vec<u64>, #[callback_result] result: Result<Option<ScoreOut>, PromiseError>) -> u32 {
+        let out = match result {
+            Ok(Some(o)) if o.ok && check_scores(&ids, &o.results).is_ok() => o,
+            other => {
+                let why = match other {
+                    Ok(Some(o)) => o.error.unwrap_or_else(|| "scores did not match the request".into()),
+                    Ok(None) => "scoring job failed or returned nothing".into(),
+                    Err(_) => "OutLayer request failed".into(),
+                };
+                emit("scoring_failed", json!({ "signals": ids, "reason": why }));
+                return 0;
+            }
+        };
+        let mut n = 0;
+        for r in &out.results {
+            let s = self.signals.get_mut(r.id as u32).unwrap();
+            if s.r_bps.is_some() {
+                continue; // a settlement scored it meanwhile
+            }
+            apply_score(s, r);
+            n += 1;
+        }
+        emit("signals_scored", json!({ "signals": out.results.iter().map(|r| json!({ "id": r.id, "r_bps": r.r_bps, "outcome": r.outcome })).collect::<Vec<_>>() }));
+        n
     }
 
     #[private]
@@ -740,11 +773,9 @@ impl SealedCalls {
         }
         for r in &out.results {
             let s = self.signals.get_mut(r.id as u32).unwrap();
-            s.r_bps = Some(r.r_bps.clamp(LOSS_BPS, MAX_GAIN_BPS));
-            s.outcome = Some(r.outcome.chars().take(32).collect());
-            s.fill_price = r.fill_price.as_ref().map(|x| x.chars().take(32).collect());
-            s.exit_price = r.exit_price.as_ref().map(|x| x.chars().take(32).collect());
-            s.cost_bps = r.cost_bps.map(|c| c.clamp(0, 10_000));
+            if s.r_bps.is_none() {
+                apply_score(s, r);
+            }
         }
         Some(self.finish_period(channel, period))
     }
@@ -866,6 +897,30 @@ impl SealedCalls {
     }
 
     // ---------------------------------------------------------------- internals
+
+    /// The OutLayer request that runs the scorer on these (revealed, valid) signals.
+    fn scoring_request(&self, ids: &[u64], deposit: NearToken) -> Promise {
+        let input: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                let s = self.signals.get(*id as u32).unwrap();
+                let b = s.body.as_ref().unwrap();
+                json!({
+                    "id": id, "venue": b.market.venue, "network": b.market.network, "address": b.market.address,
+                    "side": b.side, "leverage": b.leverage, "entry_low": b.entry_low, "entry_high": b.entry_high,
+                    "tps": b.tps, "sl": b.sl, "posted_at_ms": s.posted_at_ms, "valid_min": s.valid_min,
+                })
+            })
+            .collect();
+        let cfg = &self.config;
+        let source = json!({ "WasmUrl": { "url": cfg.scorer_wasm_url, "hash": cfg.scorer_wasm_hash, "build_target": "wasm32-wasip2" } });
+        let limits = json!({ "max_instructions": 10_000_000_000u64, "max_memory_mb": 256u32, "max_execution_seconds": 180u64 });
+        let job = json!({ "signals": input, "reference_usd": cfg.reference_usd, "liquidity_floor_usd": cfg.liquidity_floor_usd });
+        ext_outlayer::ext(cfg.outlayer.clone())
+            .with_attached_deposit(deposit)
+            .with_unused_gas_weight(1)
+            .request_execution(source, Some(limits), Some(job.to_string()), None, Some("Json".into()), Some(env::predecessor_account_id()), None)
+    }
 
     fn flush_all(&mut self) {
         self.channels.flush();
@@ -1077,6 +1132,14 @@ pub fn validate_body(b: &SignalBody) -> Result<(), String> {
         return Err("message too long".into());
     }
     Ok(())
+}
+
+fn apply_score(s: &mut Signal, r: &SignalScore) {
+    s.r_bps = Some(r.r_bps.clamp(LOSS_BPS, MAX_GAIN_BPS));
+    s.outcome = Some(r.outcome.chars().take(32).collect());
+    s.fill_price = r.fill_price.as_ref().map(|x| x.chars().take(32).collect());
+    s.exit_price = r.exit_price.as_ref().map(|x| x.chars().take(32).collect());
+    s.cost_bps = r.cost_bps.map(|c| c.clamp(0, 10_000));
 }
 
 fn opens_at(s: &Signal) -> u64 {

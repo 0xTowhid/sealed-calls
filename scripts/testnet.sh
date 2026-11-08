@@ -81,6 +81,19 @@ keep_channel() {
       log "channel $CH signal $ID: ended but its drand copy doesn't open; waiting for the grace period"
     fi
   done
+  # Official scores as soon as signals end (no waiting for the day to settle).
+  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
+  IDS=$(js "const now=Date.now();const ids=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).map(s=>s.id).slice(0,10);console.log(ids.join(','))")
+  if [ -n "$IDS" ]; then
+    log "channel $CH: scoring signals [$IDS] on OutLayer"
+    call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | cut -c1-300
+    for i in $(seq 1 12); do
+      sleep 10
+      LEFT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];console.log(JSON.parse(s).filter(x=>want.includes(x.id)&&x.r_bps==null).length)})")
+      [ "$LEFT" = 0 ] && break
+    done
+    view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];for(const x of JSON.parse(s).filter(x=>want.includes(x.id)))console.log('    signal',x.id,x.body.market.symbol,x.r_bps==null?'not scored yet':(x.r_bps/100)+'% '+x.outcome)})"
+  fi
   settle_ready "$C" "$CH" || log "channel $CH: settlement not finished this round"
 }
 
