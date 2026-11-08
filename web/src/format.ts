@@ -55,7 +55,7 @@ const OUTCOMES: Record<string, string> = {
   invalid: "invalid signal",
   unrevealed: "never opened",
   no_market: "no market",
-  below_floor: "pool under $100k",
+  below_floor: "pool under the liquidity floor",
   no_pool_at_post: "no pool at posting",
   no_data: "no price data",
   no_trades: "no trades",

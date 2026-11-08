@@ -28,7 +28,7 @@ js() { node -e "$1" "${@:2}"; }
 WASM=../contract/target/near/sealed_calls.wasm
 build() { (cd ../contract && cargo near build non-reproducible-wasm --no-embed-abi 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
 config_json() { # period_minutes
-  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
+  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":30000}}"
 }
 
 # Refuse to sign anything unless the secret's key really is a full-access key of $MAIN on testnet.
@@ -138,6 +138,13 @@ accounts)
     near account create-account fund-myself "$a" "$amt" use-manually-provided-public-key "$PUBKEY" sign-as "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "Transaction ID|error|created" | head -5
   done
   for a in "$MAIN" "$APP" "$M1" "$M2"; do log "$a: $(bal "$a")"; done
+  ;;
+
+floor)  # floor=<usd>: set the DEX liquidity floor in the contract config (no upgrade)
+  C=$APP
+  CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.liquidity_floor_usd=Number(process.argv[1]);console.log(JSON.stringify({config:c}))})" "$ARG")
+  call "$MAIN" "$APP" set_config "$CFG" '0 NEAR'
+  sleep 2; log "liquidity floor now: $(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).liquidity_floor_usd))")"
   ;;
 
 delete)  # delete=<account> (a sub-account of MAIN); its NEAR goes back to MAIN

@@ -24,7 +24,7 @@ export function Desk({ account }: { account: string | null }) {
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading your channel…</p>;
   if (!data.mine) return <CreateChannel onDone={reload} word={periodWord(data.cfg.period_minutes)} />;
-  return <Compose ch={data.mine} account={account} subs={data.subs} held={data.held} periodMinutes={data.cfg.period_minutes} />;
+  return <Compose ch={data.mine} account={account} subs={data.subs} held={data.held} periodMinutes={data.cfg.period_minutes} floorUsd={data.cfg.liquidity_floor_usd} />;
 }
 
 // ------------------------------------------------------------------ create a channel
@@ -92,7 +92,7 @@ const QUICK: [string, number][] = [["1h", 60], ["4h", 240], ["1d", 1440], ["3d",
 const clean = (s: string) => s.replace(/,/g, "").trim();
 const num = (s: string) => (/^\d*\.?\d+$/.test(clean(s)) ? Number(clean(s)) : NaN);
 
-function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; account: string; subs: [string, number, boolean][]; held: string; periodMinutes: number }) {
+function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Channel; account: string; subs: [string, number, boolean][]; held: string; periodMinutes: number; floorUsd: number }) {
   const now = useNow(10_000);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found[]>([]);
@@ -196,7 +196,7 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
         )}
         {!sel && q.trim() && searching && <div className="hint">Searching Hyperliquid and DEX pools…</div>}
         {!sel && q.trim() && !searching && note && <div className="hint bad">{note}</div>}
-        {sel && sel.liquidity != null && sel.liquidity < 100_000 && <div className="hint bad">This pool has under $100k liquidity: the signal would score −100%.</div>}
+        {sel && sel.liquidity != null && sel.liquidity < floorUsd && <div className="hint bad">This pool has under ${(floorUsd / 1000).toFixed(0)}k liquidity: the signal would score −100%.</div>}
 
         {dex ? (
           <div className="notice spot">

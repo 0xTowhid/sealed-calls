@@ -86,7 +86,7 @@ Creators get a shareable page at `/#/@<account>` with their record, money, and t
 - **Fill:** the first candle close inside the entry range during validity. Never → "not filled", 0%, and it still counts in the record.
 - **Exits:** take-profit *i* when a close crosses it (exits at TP *i*); stop loss when a close crosses it (exits at that close); TPs close equal parts; anything open exits at the last close of the validity window.
 - **Leverage:** chosen by the creator (Hyperliquid 1–50x, DEX tokens 1x). The result is the leveraged return. Liquidation if a candle's low (long) / high (short) crosses ≈ fill × (1 ∓ 1/leverage) → −100%.
-- **Costs:** Hyperliquid taker fee each side × leverage; DEX tokens pay pool fee + price impact of a $500 trade each side, and need a pool ≥ $100k paired with a major (SOL, ETH, USDC, USDT, USDG, …) that existed before the post. Any GeckoTerminal network works (Solana, Ethereum, Base, BNB Chain, Arbitrum, Robinhood Chain, …).
+- **Costs:** Hyperliquid taker fee each side × leverage; DEX tokens pay pool fee + price impact of a $500 trade each side, and need a pool ≥ $30k liquidity (the contract's `liquidity_floor_usd`) paired with a major (SOL, ETH, USDC, USDT, USDG, …) that existed before the post. Any GeckoTerminal network works (Solana, Ethereum, Base, BNB Chain, Arbitrum, Robinhood Chain, …).
 - **Candles:** the finest still available (1-minute for recent signals; 5- or 15-minute or 1-hour for older ones). The size used is shown in the outcome.
 - Clipped to −100%…+300%. A signal never revealed after the grace period, or a revealed text that is not a valid signal, scores −100%.
 - **Period score** `S = Σr / (n + 5)`: five phantom flat signals, so a couple of lucky trades can't beat a long steady record.
@@ -100,7 +100,7 @@ Creators get a shareable page at `/#/@<account>` with their record, money, and t
 - Each signal is wrapped to every active subscriber, so channels are capped at 100 subscribers.
 - Late access works only while the creator's desk is open in a browser that holds their creator key.
 - GitHub's scheduler sometimes runs the keeper late; anyone can also reveal, score or settle from the app.
-- **Micro-caps are not scored.** DEX tokens need ≥ $100k liquidity: in a smaller pool a caller could push the price into their own take-profit for a few hundred dollars, and the chart price isn't what a buyer gets.
+- **Micro-caps are not scored.** DEX tokens need ≥ $30k liquidity: in a smaller pool a caller could push the price into their own take-profit for a few hundred dollars, and the chart price isn't what a buyer gets.
 
 ## Next
 
