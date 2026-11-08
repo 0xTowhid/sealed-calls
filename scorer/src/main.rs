@@ -56,7 +56,9 @@ fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[Str
             }
             Ok(finish(s.id, &plan, &walk(&plan, &candles), HL_TAKER_FEE, HL_TAKER_FEE, sec))
         }
-        "gecko" => {
+        "gecko" | "gecko_micro" => {
+            let micro = s.venue == "gecko_micro";
+            let (floor_usd, rules) = if micro { (MICRO_FLOOR_USD, MICRO) } else { (floor_usd, NORMAL) };
             let net = s.network.clone().unwrap_or_default();
             let v = get(&format!("{GT}/{net}/tokens/{}/pools?include=base_token,quote_token", s.address))?;
             let pools = parse_pools(&v, &s.address);
@@ -86,7 +88,7 @@ fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[Str
                 return Ok(SignalScore { id: s.id, r_bps: 0, outcome: "no_trades".into(), fill_price: None, exit_price: None, cost_bps: None });
             }
             let (c_in, c_out) = (dex_side_cost(pool, ref_usd), dex_side_cost(now_pool, ref_usd));
-            Ok(finish(s.id, &plan, &walk(&plan, &candles), c_in, c_out, sec))
+            Ok(finish(s.id, &plan, &walk_with(&plan, &candles, rules), c_in, c_out, sec))
         }
         _ => Ok(lose(s.id, "invalid")),
     }

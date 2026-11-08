@@ -28,7 +28,7 @@ js() { node -e "$1" "${@:2}"; }
 WASM=../contract/target/near/sealed_calls.wasm
 build() { (cd ../contract && cargo near build non-reproducible-wasm --no-embed-abi 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
 config_json() { # period_minutes
-  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":30000}}"
+  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
 }
 
 # Refuse to sign anything unless the secret's key really is a full-access key of $MAIN on testnet.

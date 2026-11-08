@@ -331,6 +331,8 @@ fn body_rules() {
     assert!(validate_body(&mk("hyperliquid", None, "long", 2, "100", "101", &["101"], "95")).is_err());
     assert!(validate_body(&mk("gecko", Some("solana"), "long", 1, "0.00002", "0.000021", &["0.00003"], "0.000015")).is_ok());
     assert!(validate_body(&mk("gecko", Some("solana"), "short", 1, "1", "1", &["0.5"], "2")).is_err());
+    assert!(validate_body(&mk("gecko_micro", Some("solana"), "long", 1, "0.00002", "0.000021", &["0.00003"], "0.000015")).is_ok());
+    assert!(validate_body(&mk("gecko_micro", Some("solana"), "long", 5, "1", "1", &["2"], "0.5")).is_err());
     assert!(validate_body(&mk("gecko", Some("solana"), "long", 3, "1", "1", &["2"], "0.5")).is_err());
     assert!(validate_body(&mk("gecko", None, "long", 1, "1", "1", &["2"], "0.5")).is_err());
     assert!(validate_body(&mk("hyperliquid", None, "long", 1, "-1", "1", &["2"], "0.5")).is_err());

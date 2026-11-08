@@ -9,6 +9,9 @@
 //!   Anything still open exits at the last close of the validity window ("expired").
 //! * Costs: Hyperliquid taker fee each side × leverage; DEX tokens pay pool fee + price impact of
 //!   the reference trade each side. Result clipped to −100%…+300%.
+//! * Micro-cap signals (venue "gecko_micro"): pools from $10k liquidity; a take-profit needs two
+//!   consecutive closes beyond it; at expiry the open part exits at the median close of the last
+//!   30 minutes (or the lowest close if fewer than 10 traded), so one pumped candle doesn't count.
 //! * Candle size: the finest the source still has for the window (1-minute when the signal is
 //!   recent; otherwise 5- or 15-minute, or 1-hour). The size used is reported.
 
@@ -166,7 +169,42 @@ pub struct Walk {
     pub outcome: String,
 }
 
+/// Extra rules for micro-cap signals (thin pools that a caller could push cheaply).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rules {
+    /// A take-profit needs this many consecutive closes beyond it (1 normally, 2 for micro-caps).
+    pub tp_confirm: usize,
+    /// At expiry, exit at the median close of the last 30 minutes (≥ 10 trading candles), else the
+    /// lowest close in them — so a last-minute pump doesn't count.
+    pub median_exit: bool,
+}
+pub const NORMAL: Rules = Rules { tp_confirm: 1, median_exit: false };
+pub const MICRO: Rules = Rules { tp_confirm: 2, median_exit: true };
+/// Liquidity floor for micro-cap signals (normal DEX signals use the contract's floor).
+pub const MICRO_FLOOR_USD: f64 = 10_000.0;
+
+/// The exit at expiry for the open part: last close, or the micro-cap median rule.
+pub fn expiry_exit(w: &[Candle], median: bool) -> f64 {
+    let last = w.last().unwrap();
+    if !median {
+        return last.close;
+    }
+    let from = last.t.saturating_sub(1800);
+    let mut tail: Vec<f64> = w.iter().filter(|c| c.t >= from).map(|c| c.close).collect();
+    tail.sort_by(|a, b| a.total_cmp(b));
+    if tail.len() >= 10 {
+        let n = tail.len();
+        if n % 2 == 1 { tail[n / 2] } else { (tail[n / 2 - 1] + tail[n / 2]) / 2.0 }
+    } else {
+        tail.first().copied().unwrap_or(last.close)
+    }
+}
+
 pub fn walk(p: &Plan, w: &[Candle]) -> Walk {
+    walk_with(p, w, NORMAL)
+}
+
+pub fn walk_with(p: &Plan, w: &[Candle], rules: Rules) -> Walk {
     let Some(fi) = w.iter().position(|c| c.close >= p.lo && c.close <= p.hi) else {
         return Walk { fill: None, exits: vec![], outcome: "not_filled".into() };
     };
@@ -175,6 +213,7 @@ pub fn walk(p: &Plan, w: &[Candle]) -> Walk {
     let liq = if p.long { fill * (1.0 - 1.0 / p.leverage) } else { fill * (1.0 + 1.0 / p.leverage) };
     let mut exits: Vec<f64> = vec![];
     let mut tps_hit = 0usize;
+    let mut streak = 0usize; // consecutive closes beyond the next take-profit
     for c in &w[fi + 1..] {
         let liquidated = if p.long { p.leverage > 1.0 && c.low <= liq } else { c.high >= liq };
         if liquidated {
@@ -188,20 +227,24 @@ pub fn walk(p: &Plan, w: &[Candle]) -> Walk {
             let outcome = if tps_hit > 0 { format!("tp{tps_hit}+sl") } else { "sl".into() };
             return Walk { fill: Some(fill), exits, outcome };
         }
-        while tps_hit < p.tps.len() {
-            let tp = p.tps[tps_hit];
-            let hit = if p.long { c.close >= tp } else { c.close <= tp };
-            if !hit {
-                break;
+        let beyond = |tp: f64| if p.long { c.close >= tp } else { c.close <= tp };
+        if tps_hit < p.tps.len() && beyond(p.tps[tps_hit]) {
+            streak += 1;
+        } else {
+            streak = 0;
+        }
+        if streak >= rules.tp_confirm {
+            while tps_hit < p.tps.len() && beyond(p.tps[tps_hit]) {
+                exits.push(p.tps[tps_hit]);
+                tps_hit += 1;
             }
-            exits.push(tp);
-            tps_hit += 1;
+            streak = 0;
         }
         if tps_hit == p.tps.len() {
             return Walk { fill: Some(fill), exits, outcome: format!("tp{tps_hit}") };
         }
     }
-    let last = w.last().unwrap().close;
+    let last = expiry_exit(w, rules.median_exit);
     exits.resize(parts, last);
     let outcome = if tps_hit > 0 { format!("tp{tps_hit}+expired") } else { "expired".into() };
     Walk { fill: Some(fill), exits, outcome }
@@ -507,6 +550,24 @@ mod tests {
         assert_eq!(parse_gt_candles(&g), vec![Candle { t: 1_704_458_100, high: 2.0, low: 0.5, close: 1.5 }]);
         let h = serde_json::json!([{ "t": 1_704_458_100_000u64, "T": 1, "o": "1", "h": "2", "l": "0.5", "c": "1.5", "v": "9", "n": 3 }]);
         assert_eq!(parse_hl_candles(&h), vec![Candle { t: 1_704_458_100, high: 2.0, low: 0.5, close: 1.5 }]);
+    }
+
+    #[test]
+    fn micro_caps_need_two_closes_for_a_tp_and_exit_on_the_median() {
+        let p = long(1.0, 100.0, 100.0, &[150.0], 50.0);
+        // one pumped close above the TP doesn't count for a micro-cap…
+        let spike = series(&[100.0, 160.0, 101.0, 102.0]);
+        assert_eq!(walk_with(&p, &spike, MICRO).outcome, "expired");
+        assert_eq!(walk(&p, &spike).outcome, "tp1");
+        // …two in a row do
+        assert_eq!(walk_with(&p, &series(&[100.0, 155.0, 152.0]), MICRO).outcome, "tp1");
+        // expiry: a last-minute pump is ignored (median of the last 30 minutes)
+        let mut closes = vec![100.0; 20];
+        closes.push(140.0);
+        let w = walk_with(&p, &series(&closes), MICRO);
+        assert_eq!(w.exits, vec![100.0]);
+        // fewer than 10 trading candles in the last 30 minutes → the lowest close
+        assert_eq!(expiry_exit(&series(&[100.0, 120.0, 90.0, 130.0]), true), 90.0);
     }
 
     #[test]

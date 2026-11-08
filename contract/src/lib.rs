@@ -161,8 +161,9 @@ pub enum SignalStatus {
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Market {
-    /// "hyperliquid" (perps; `address` is the coin, e.g. "BTC") or "gecko" (a DEX token on
-    /// GeckoTerminal; `network` e.g. "solana", `address` the token address).
+    /// "hyperliquid" (perps; `address` is the coin, e.g. "BTC"), "gecko" (a DEX token on
+    /// GeckoTerminal; `network` e.g. "solana", `address` the token address) or "gecko_micro" (the
+    /// same, scored with the micro-cap rules: lower liquidity floor, stricter TPs and exits).
     pub venue: String,
     #[serde(default)]
     pub network: Option<String>,
@@ -1083,7 +1084,7 @@ pub fn validate_body(b: &SignalBody) -> Result<(), String> {
                 return Err(format!("leverage must be 1..={MAX_LEVERAGE}"));
             }
         }
-        "gecko" => {
+        "gecko" | "gecko_micro" => {
             let net = m.network.as_deref().unwrap_or("");
             if !token_chars(net, 32) {
                 return Err("DEX tokens need a network".into());
