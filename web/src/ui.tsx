@@ -174,7 +174,7 @@ export function LiveCells({ b, postedMs, validMin }: { b: SignalBody; postedMs: 
 }
 
 export function MicroTag() {
-  return <span className="micro" title="Micro-cap signal: pool under the normal liquidity floor; scored with stricter rules">MICRO</span>;
+  return <span className="micro" title="Micro-cap signal: pool under the normal liquidity floor; scored with stricter rules">Micro-cap</span>;
 }
 
 /** "called at ≈ $42k mcap" for a micro-cap signal. */
@@ -189,7 +189,7 @@ export function McapAtCall({ b, fill }: { b: SignalBody; fill?: string | null })
 // ------------------------------------------------------------------ channel kinds
 
 export const KINDS = [["perps", "Perps"], ["dex", "DEX tokens"], ["micro", "Micro-caps"]] as const;
-const KIND_TAG: Record<string, string> = { perps: "PERPS", dex: "DEX", micro: "MICRO" };
+const KIND_TAG: Record<string, string> = { perps: "Perps", dex: "DEX", micro: "Micro-caps" };
 const VENUE_TAG = { hyperliquid: "perps", gecko: "dex", gecko_micro: "micro" } as const;
 
 /** Declared kinds plus every kind actually revealed; nothing declared and nothing revealed = all kinds. */
@@ -201,7 +201,7 @@ export function kindsShown(tags: string[], signals: { body?: SignalBody | null }
 }
 
 export function KindTags({ kinds }: { kinds: string[] }) {
-  if (!kinds.length) return <span className="kind">ALL KINDS</span>;
+  if (!kinds.length) return <span className="kind">All markets</span>;
   return <>{kinds.map((k) => <span key={k} className={`kind${k === "micro" ? " m" : ""}`}>{KIND_TAG[k]}</span>)}</>;
 }
 
@@ -217,5 +217,39 @@ export function KindPicker({ value, onChange }: { value: string[]; onChange: (v:
       </div>
       <div className="hint">Pick one for a niche channel, or leave all off for all kinds. This decides which Explore tabs list the channel before its signals open. Once signals end, the channel also shows in the tab of every kind it actually posted.</div>
     </>
+  );
+}
+
+// ------------------------------------------------------------------ identity + chart
+
+/** A colour avatar derived from the account name (no images, same colours everywhere). */
+export function Avatar({ id, size }: { id: string; size?: number }) {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const a = h % 360, b = (a + 70 + (h >> 9) % 80) % 360, c = (b + 90) % 360;
+  const style = { background: `conic-gradient(from ${(h >> 3) % 360}deg, hsl(${a} 85% 58%), hsl(${b} 85% 60%), hsl(${c} 80% 62%), hsl(${a} 85% 58%))`, ...(size ? { width: size, height: size } : {}) };
+  return <span className="av" style={style} aria-hidden />;
+}
+
+/** Cumulative result, call by call (sum of each scored call's result), oldest to newest. */
+export function ResultChart({ signals }: { signals: Signal[] }) {
+  const pts = [...signals].filter((s) => s.r_bps != null).sort((a, b) => a.posted_at_ms - b.posted_at_ms);
+  if (pts.length < 2) return <div className="none">The chart starts after two calls are scored.</div>;
+  let acc = 0;
+  const ys = [0, ...pts.map((s) => (acc += s.r_bps!))];
+  const lo = Math.min(0, ...ys), hi = Math.max(0, ...ys), span = hi - lo || 1;
+  const W = 800, H = 170, pad = 12;
+  const x = (i: number) => (i / (ys.length - 1)) * W;
+  const y = (v: number) => pad + (1 - (v - lo) / span) * (H - 2 * pad);
+  const line = ys.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const up = acc >= 0;
+  const col = up ? "#078B55" : "#DC3D4B";
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Cumulative result ${pct(acc)} over ${pts.length} calls`}>
+      <defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={up ? "#00EC97" : "#DC3D4B"} stopOpacity=".25" /><stop offset="1" stopColor={up ? "#00EC97" : "#DC3D4B"} stopOpacity="0" /></linearGradient></defs>
+      <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="#D7DCD9" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
+      <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="url(#cg)" />
+      <path d={line} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
   );
 }

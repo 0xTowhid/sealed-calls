@@ -28,6 +28,16 @@ export async function view<T>(method: string, args: object = {}): Promise<T> {
   throw new Error(`Couldn't read ${method} from ${CONTRACT}: ${last.slice(0, 200)}`);
 }
 
+/** Spendable NEAR of an account (yocto string), or null. */
+export async function balanceOf(account: string): Promise<string | null> {
+  for (const url of RPCS) {
+    try {
+      const j = await (await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "query", params: { request_type: "view_account", finality: "optimistic", account_id: account } }) })).json();
+      if (j.result?.amount) return j.result.amount as string;
+    } catch { /* next */ }
+  }
+  return null;
+}
 export const getConfig = () => view<Config>("get_config");
 export const listChannels = () => view<Channel[]>("list_channels", { limit: 100 });
 /** Declared kinds per channel ("perps" | "dex" | "micro"); empty = all kinds. Older contract → all empty. */

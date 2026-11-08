@@ -1,7 +1,7 @@
 import { allSignals, channelTags, listChannels } from "../near";
 import { creatorRecord, useLoad } from "../data";
 import { channelPath, day, pct } from "../format";
-import { KindTags, kindsShown } from "../ui";
+import { Avatar, KindTags, kindsShown } from "../ui";
 
 /** A creator's page: every channel they run and their combined record. */
 export function CreatorPage({ creator, account }: { creator: string; account: string | null }) {
@@ -18,9 +18,12 @@ export function CreatorPage({ creator, account }: { creator: string; account: st
   return (
     <section className="sheet">
       <div className="owner-head">
-        <div>
-          <div className="sub0 small">{creator} · creator since {day(data.since)}</div>
-          <h1 className="display m">{own ? "My channels" : `${creator}'s channels`}</h1>
+        <div className="prof-top">
+          <Avatar id={creator} size={48} />
+          <div>
+            <h1 className="display m" style={{ margin: 0 }}>{own ? "My channels" : `${creator}'s channels`}</h1>
+            <div className="sub0 small">{creator} · trading since {day(data.since)}</div>
+          </div>
         </div>
         {own && <a className="btn" href="#/desk/new">+ New channel</a>}
       </div>

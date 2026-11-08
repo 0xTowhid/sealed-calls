@@ -1,7 +1,9 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { listChannels, signIn, signOut } from "./near";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { balanceOf, listChannels, signIn, signOut } from "./near";
 import { useAccount, useLoad } from "./data";
-import { slug } from "./format";
+import { nearNum, slug } from "./format";
+import { Avatar } from "./ui";
+import { CONTRACT, EXPLORER } from "./config";
 import { Explore } from "./pages/Explore";
 // Pages that need the crypto libraries (drand timelock, libsodium) load on demand.
 const ChannelPage = lazy(() => import("./pages/Channel").then((m) => ({ default: m.ChannelPage })));
@@ -19,6 +21,35 @@ function useRoute() {
   return hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
 }
 
+function Wallet({ account, hasChannel }: { account: string | null; hasChannel: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const bal = useLoad(() => (account ? balanceOf(account) : Promise.resolve(null)), [account], 30_000, `bal:${account}`).data;
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+  if (!account) return <button className="chip connect" onClick={() => signIn()}>Connect wallet</button>;
+  return (
+    <div className="wallet" ref={ref}>
+      <button className="chip" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <Avatar id={account} />{account}
+        {bal != null && <span className="bal">{nearNum(bal).toLocaleString(undefined, { maximumFractionDigits: 2 })} NEAR</span>}
+      </button>
+      {open && (
+        <div className="menu">
+          <div className="who"><b>{account}</b>NEAR testnet</div>
+          {hasChannel && <a href={`#/@${account}`} onClick={() => setOpen(false)}>My channels</a>}
+          <a href="#/feed" onClick={() => setOpen(false)}>My feed</a>
+          <a href={`${EXPLORER}/address/${account}`} target="_blank" rel="noreferrer">View on explorer ↗</a>
+          <button onClick={() => signOut()}>Disconnect</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const route = useRoute();
   const account = useAccount();
@@ -29,49 +60,60 @@ export default function App() {
   // /#/@creator/<slug or id>: one channel; /#/@creator: the creator's page (or their only channel)
   const theirs = at ? channels?.filter((c) => c.creator === at) ?? [] : [];
   const pick = at && route[1] ? theirs.find((c) => slug(c.name) === route[1] || String(c.id) === route[1]) : theirs.length === 1 ? theirs[0] : undefined;
-  const link = (to: string, href: string, label: string) => (
-    <a href={href} className={page === to ? "on" : ""} aria-current={page === to ? "page" : undefined}>{label}</a>
+  const links: [string, string, string][] = [
+    ["explore", "#/", "Explore"],
+    ["feed", "#/feed", "Feed"],
+    ...(mine.length ? [["mine", `#/@${account}`, mine.length > 1 ? "My channels" : "My channel"] as [string, string, string]] : []),
+    ["desk", "#/desk", "Creator desk"],
+  ];
+  const nav = (cls: string) => (
+    <nav className={cls} aria-label="Main">
+      {links.map(([to, href, label]) => (
+        <a key={to} href={href} className={page === to || (to === "explore" && page === "c") ? "on" : ""} aria-current={page === to ? "page" : undefined}>{label}</a>
+      ))}
+    </nav>
   );
 
   return (
-    <div className="wrap">
-      <header className="mast">
-        <a className="brand" href="#/">Sealed Calls</a>
-        <nav className="nav" aria-label="Main">
-          {link("explore", "#/", "Explore")}
-          {link("feed", "#/feed", "My feed")}
-          {mine.length > 0 && link("mine", `#/@${account}`, mine.length > 1 ? "My channels" : "My channel")}
-          {link("desk", "#/desk", "Creator desk")}
-          {account ? (
-            <>
-              <span className="acct">{account}</span>
-              <button onClick={() => signOut()}>Sign out</button>
-            </>
-          ) : (
-            <button onClick={() => signIn()}>Connect wallet</button>
-          )}
-        </nav>
+    <>
+      <header className="bar">
+        <div className="bar-in">
+          <a className="logo" href="#/"><i /><span>Sealed Calls</span></a>
+          {nav("tabs")}
+          <div className="bar-r">
+            <a className="chip net" href={`${EXPLORER}/address/${CONTRACT}`} target="_blank" rel="noreferrer" title={`Contract ${CONTRACT}`}><span className="dot" />NEAR Testnet</a>
+            <Wallet account={account} hasChannel={mine.length > 0} />
+          </div>
+        </div>
       </header>
+      {nav("mtabs")}
 
-      <Suspense fallback={<p className="empty">Loading…</p>}>
-      {page === "explore" && <Explore />}
-      {page === "c" && !at && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
-      {at && (() => {
-        if (!channels) return <p className="empty">Reading channels…</p>;
-        if (!theirs.length) return <div className="notice">{at === account ? <>You don't have a channel yet. <a href="#/desk">Start one</a>.</> : `${at} doesn't have a channel yet.`}</div>;
-        if (pick) return <ChannelPage id={pick.id} account={account} />;
-        return <CreatorPage creator={at} account={account} />;
-      })()}
-      {page === "feed" && <Feed account={account} />}
-      {page === "desk" && <Desk account={account} newChannel={route[1] === "new"} />}
-      </Suspense>
+      <main className="wrap">
+        <Suspense fallback={<p className="empty">Loading…</p>}>
+          {page === "explore" && <Explore account={account} />}
+          {page === "c" && !at && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
+          {at && (() => {
+            if (!channels) return <p className="empty">Reading channels…</p>;
+            if (!theirs.length) return <div className="notice">{at === account ? <>You don't have a channel yet. <a href="#/desk">Start one</a>.</> : `${at} doesn't have a channel yet.`}</div>;
+            if (pick) return <ChannelPage id={pick.id} account={account} />;
+            return <CreatorPage creator={at} account={account} />;
+          })()}
+          {page === "feed" && <Feed account={account} />}
+          {page === "desk" && <Desk account={account} newChannel={route[1] === "new"} />}
+        </Suspense>
 
-      <p className="fine foot">
-        Signals can't be edited, deleted or hidden, and become public when they end. Results are indicative: they replay each signal on public
-        candles (Hyperliquid, GeckoTerminal) with fees, leverage and, for DEX tokens, the price impact of a $500 trade. Sealed Calls doesn't stop
-        creators trading against subscribers; it makes their record public and pays them in full only when signals work. NEAR testnet.{" "}
-        <a href="https://github.com/0xTowhid/sealed-calls">Source</a>
-      </p>
-    </div>
+        <footer className="foot">
+          <p>
+            Calls can't be edited, deleted or hidden, and become public when they end. Results are indicative returns for a $500 trade, replayed on
+            public candles (Hyperliquid, GeckoTerminal) with fees and leverage. Sealed Calls doesn't stop traders trading against subscribers; it makes
+            their record public and pays them in full only when calls work.
+          </p>
+          <p>
+            <a href={`${EXPLORER}/address/${CONTRACT}`} target="_blank" rel="noreferrer">{CONTRACT}</a> · NEAR testnet ·{" "}
+            <a href="https://github.com/0xTowhid/sealed-calls" target="_blank" rel="noreferrer">Source</a>
+          </p>
+        </footer>
+      </main>
+    </>
   );
 }
