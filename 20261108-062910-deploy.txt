@@ -1,0 +1,13 @@
+=== deploy  commit 243e05c087e17322667436dbfd255465d48b5e5f  Sun Nov  8 06:29:10 UTC 2026
+[06:29:14] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[06:29:59] wasm sha256 587d10cb844f21daf612827103bbb25c73eac85e1008d6b52a1def2ccef8c854
+[06:29:59] code needs about 4 NEAR of storage
+[06:30:00] upgrading existing v2 contract (state kept); pointing it at the current scorer; +0.3 NEAR for late-access storage
+│    Transaction ID: FmtXq33YVfPVq5MtpWH5CkhxncVG563W1i8YJNRUFSkt
+    │    Transaction ID: JDuyQvNnxTu3TpyVyMKzA2njojtcpZ3udPrzqHxfWU2Z
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"config_changed","data":[{"scorer_wasm_hash":"caaaadc6b0e7efb8eaada1504abcf60e7d3609a289912a4d5ce5a31d5ea1530f"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[06:30:20] config: {"owner":"to69.testnet","period_minutes":1440,"grace_min":30,"min_signals":1,"max_signals_per_day":10,"scorer_wasm_url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/07576ff7461b77d84299f2f036ff100ed177e6ae/scorer.wasm","scorer_wasm_hash":"caaaadc6b0e7efb8eaada1504abcf60e7d3609a289912a4d5ce5a31d5ea1530f","outlayer":"outlayer.testnet","reference_usd":500,"liquidity_floor_usd":100000}
