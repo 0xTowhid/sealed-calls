@@ -157,8 +157,8 @@ deploy)
     near tokens "$MAIN" send-near "$APP" '0.5 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
   fi
   if view get_config '{}' >/dev/null 2>&1; then
-    log "upgrading existing v2 contract (state kept); pointing it at the current scorer; +0.3 NEAR for late-access storage"
-    near tokens "$MAIN" send-near "$APP" '0.3 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
+    log "upgrading existing v2 contract (state kept); pointing it at the current scorer (TOPUP=<n> also sends n NEAR for storage)"
+    [ -n "${TOPUP:-}" ] && near tokens "$MAIN" send-near "$APP" "$TOPUP NEAR" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
     near contract deploy "$APP" use-file "$WASM" without-init-call network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
     sleep 3
     CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.scorer_wasm_url=process.argv[1];c.scorer_wasm_hash=process.argv[2];console.log(JSON.stringify({config:c}))})" "$SCORER_URL" "$SCORER_HASH")
