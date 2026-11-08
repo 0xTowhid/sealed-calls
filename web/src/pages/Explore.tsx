@@ -111,12 +111,12 @@ export function Explore() {
                 {microRows.map((r, i) => (
                   <tr key={r.creator} onClick={() => (window.location.hash = `#/@${r.creator}`)} className="click">
                     <td className="rank">{i + 1}</td>
-                    <td><a href={`#/@${r.creator}`} className="cname">{r.creator}</a><div className="sub0 small">{r.inTab.map((c) => c.ch.name).join(" · ")}</div></td>
-                    <td>{r.sigs.length ? <Ticks signals={r.sigs} /> : <span className="sub0 small">None ended yet</span>}</td>
-                    <td className="n">{r.sigs.length}</td>
-                    <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
+                    <td className="who"><a href={`#/@${r.creator}`} className="cname">{r.creator}</a><div className="sub0 small">{r.inTab.map((c) => c.ch.name).join(" · ")}</div></td>
+                    <td className="tk">{r.sigs.length ? <Ticks signals={r.sigs} /> : <span className="sub0 small">None ended yet</span>}</td>
+                    <td className="n" data-l="Signals">{r.sigs.length}</td>
+                    <td className="n" data-l="Win rate">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
                     <td className={`n score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</td>
-                    <td className="n"><AvgMcap signals={r.sigs} /></td>
+                    <td className="n" data-l="Avg mcap at call"><AvgMcap signals={r.sigs} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -134,15 +134,15 @@ export function Explore() {
                 {rows.map((r, i) => (
                   <tr key={r.creator} onClick={() => (window.location.hash = `#/@${r.creator}`)} className="click">
                     <td className="rank">{i + 1}</td>
-                    <td><a href={`#/@${r.creator}`} className="cname">{r.chans.length === 1 ? r.chans[0].ch.name : r.creator}</a>{r.chans.length === 1 && <KindTags kinds={kindsShown(r.chans[0].tags, r.chans[0].signals)} />}<div className="sub0 small">{r.chans.length === 1 ? r.creator : r.inTab.map((c, j) => <span key={c.ch.id}>{j ? " · " : ""}{c.ch.name}<KindTags kinds={kindsShown(c.tags, c.signals)} /></span>)}</div></td>
-                    <td>{r.sigs.length || filter === "all" ? <Ticks signals={r.sigs} /> : <span className="sub0 small">None ended yet</span>}</td>
-                    <td className="n">{r.chans.length}</td>
-                    <td className="n">{r.rec.signals}</td>
-                    <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
+                    <td className="who"><a href={`#/@${r.creator}`} className="cname">{r.chans.length === 1 ? r.chans[0].ch.name : r.creator}</a>{r.chans.length === 1 && <KindTags kinds={kindsShown(r.chans[0].tags, r.chans[0].signals)} />}<div className="sub0 small">{r.chans.length === 1 ? r.creator : r.inTab.map((c, j) => <span key={c.ch.id}>{j ? " · " : ""}{c.ch.name}<KindTags kinds={kindsShown(c.tags, c.signals)} /></span>)}</div></td>
+                    <td className="tk">{r.sigs.length || filter === "all" ? <Ticks signals={r.sigs} /> : <span className="sub0 small">None ended yet</span>}</td>
+                    <td className="n" data-l="Channels">{r.chans.length}</td>
+                    <td className="n" data-l="Signals">{r.rec.signals}</td>
+                    <td className="n" data-l="Win rate">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
                     <td className={`n score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</td>
-                    <td className="n">{r.settled ? `${r.earned} of ${r.settled}` : "—"}</td>
-                    <td className="n">{r.subs}</td>
-                    <td className="n">{r.cheapest ? <><b>{near(r.cheapest.price)}</b><div className="sub0 small">{planName(r.cheapest.days)}</div></> : "—"}</td>
+                    <td className="n" data-l="Days earned">{r.settled ? `${r.earned} of ${r.settled}` : "—"}</td>
+                    <td className="n" data-l="Subscribers">{r.subs}</td>
+                    <td className="n" data-l="From">{r.cheapest ? <><b>{near(r.cheapest.price)}</b><div className="sub0 small">{planName(r.cheapest.days)}</div></> : "—"}</td>
                   </tr>
                 ))}
               </tbody>

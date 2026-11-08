@@ -1,13 +1,15 @@
-import { allSignals, listChannels } from "../near";
+import { allSignals, channelTags, listChannels } from "../near";
 import { creatorRecord, useLoad } from "../data";
 import { channelPath, day, pct } from "../format";
-import { MicroTag } from "../ui";
+import { KindTags, kindsShown } from "../ui";
 
 /** A creator's page: every channel they run and their combined record. */
 export function CreatorPage({ creator, account }: { creator: string; account: string | null }) {
   const { data, error } = useLoad(async () => {
     const channels = await listChannels();
-    return { channels, ...(await creatorRecord(creator, channels, (ch) => allSignals(ch.id, ch.signal_count))) };
+    const mine = channels.filter((c) => c.creator === creator);
+    const [rec, tags] = await Promise.all([creatorRecord(creator, channels, (ch) => allSignals(ch.id, ch.signal_count)), channelTags(mine.map((c) => c.id))]);
+    return { channels, ...rec, tags: new Map(mine.map((c, i) => [c.id, tags[i] ?? []])) };
   }, [creator], 30_000, `creator:${creator}`);
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading {creator}'s channels…</p>;
@@ -26,8 +28,8 @@ export function CreatorPage({ creator, account }: { creator: string; account: st
         {data.per.map(({ ch, signals, rec }) => (
           <a className="chrow" key={ch.id} href={channelPath(ch, data.channels)}>
             <div>
-              <b>{ch.name}</b>{signals.some((s) => s.body?.market.venue === "gecko_micro") && <> <MicroTag /></>}
-              <div className="small sub0">{window.location.host}{window.location.pathname}{channelPath(ch, data.channels)}</div>
+              <b>{ch.name}</b><KindTags kinds={kindsShown(data.tags.get(ch.id) ?? [], signals)} />
+              <div className="small sub0 url0">{window.location.host}{window.location.pathname}{channelPath(ch, data.channels)}</div>
             </div>
             <div className="n"><b>{rec.signals}</b><span>signals</span></div>
             <div className="n"><b className={cls(rec.score_bps)}>{pct(rec.score_bps)}</b><span>score</span></div>
