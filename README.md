@@ -24,9 +24,9 @@ Built for NEAR HACKATHON 2026 by [@0xTowhid](https://x.com/0xTowhid). Testnet on
 ```bash
 git clone https://github.com/0xTowhid/sealed-calls && cd sealed-calls
 
-# 1. Contract rules: channels, 50/50 escrow, sealing, reveal, settlement, refunds (30 tests)
+# 1. Contract rules: channels, 50/50 escrow, sealing, reveal, late access, scoring, settlement, refunds (38 tests)
 cd contract && cargo test && cd ..
-# expect: "test result: ok. 30 passed"
+# expect: "test result: ok. 38 passed"
 
 # 2. Scoring rules: fills, TP/SL on closes, leverage + liquidation on wicks, shorts, costs (12 tests)
 cd scorer && cargo test && cd ..
@@ -62,6 +62,15 @@ node scripts/sample-signals.mjs | wasmtime run -S http scorer/target/wasm32-wasi
 
 It runs in GitHub Actions (`.github/workflows/testnet.yml`, signing with a testnet key from a repo secret); logs are on the [`testnet-results`](https://github.com/0xTowhid/sealed-calls/tree/testnet-results) branch. To run it yourself: `MAIN=<you>.testnet SK=<testnet private key> PUBKEY=<its public key> SCORER_URL=… SCORER_HASH=… bash scripts/testnet.sh e2e`.
 
+## How a signal lives
+
+1. **Posted, sealed.** The creator posts from the Creator desk. Active subscribers decrypt it in their feed at once; the public sees only that a signal exists. A live, unofficial replay on public candles shows subscribers whether it filled, hit a TP or the SL.
+2. **Late subscribers.** Each signal's key is derived from a secret in the creator's browser, so while the creator's desk is open it shares live signals with people who subscribe later (`share_signals`).
+3. **Ends, opens, scored.** When its validity ends, the drand copy opens; a keeper (GitHub Actions, twice an hour) reveals it and calls `score_signals`, and the OutLayer job writes the official result on-chain, usually within 30 minutes.
+4. **The day settles.** After each period, `settle` adds up the period's scores: positive → the period's held half of subscriptions goes to the creator; otherwise each subscriber can `claim_refund` their own slice.
+
+Creators get a shareable page at `/#/@<account>` with their record, money, and their own live signals (decrypted only in their browser).
+
 ## How it uses NEAR
 
 | Piece | What it does here |
@@ -77,7 +86,7 @@ It runs in GitHub Actions (`.github/workflows/testnet.yml`, signing with a testn
 - **Fill:** the first candle close inside the entry range during validity. Never → "not filled", 0%, and it still counts in the record.
 - **Exits:** take-profit *i* when a close crosses it (exits at TP *i*); stop loss when a close crosses it (exits at that close); TPs close equal parts; anything open exits at the last close of the validity window.
 - **Leverage:** chosen by the creator (Hyperliquid 1–50x, DEX tokens 1x). The result is the leveraged return. Liquidation if a candle's low (long) / high (short) crosses ≈ fill × (1 ∓ 1/leverage) → −100%.
-- **Costs:** Hyperliquid taker fee each side × leverage; DEX tokens pay pool fee + price impact of a $500 trade each side, and need a pool ≥ $100k paired with a major (SOL, ETH, USDC, …) that existed before the post.
+- **Costs:** Hyperliquid taker fee each side × leverage; DEX tokens pay pool fee + price impact of a $500 trade each side, and need a pool ≥ $100k paired with a major (SOL, ETH, USDC, USDT, USDG, …) that existed before the post. Any GeckoTerminal network works (Solana, Ethereum, Base, BNB Chain, Arbitrum, Robinhood Chain, …).
 - **Candles:** the finest still available (1-minute for recent signals; 5- or 15-minute or 1-hour for older ones). The size used is shown in the outcome.
 - Clipped to −100%…+300%. A signal never revealed after the grace period, or a revealed text that is not a valid signal, scores −100%.
 - **Period score** `S = Σr / (n + 5)`: five phantom flat signals, so a couple of lucky trades can't beat a long steady record.
@@ -89,12 +98,20 @@ It runs in GitHub Actions (`.github/workflows/testnet.yml`, signing with a testn
 - Subscribers can leak decrypted signals; creators can trade against subscribers. Neither is prevented; the public record is the deterrent.
 - The contract owner can point to a new scorer build (URL + sha256 are public in `get_config`). A production version would put that behind a DAO.
 - Each signal is wrapped to every active subscriber, so channels are capped at 100 subscribers.
+- Late access works only while the creator's desk is open in a browser that holds their creator key.
+- GitHub's scheduler sometimes runs the keeper late; anyone can also reveal, score or settle from the app.
+- **Micro-caps are not scored.** DEX tokens need ≥ $100k liquidity: in a smaller pool a caller could push the price into their own take-profit for a few hundred dollars, and the chart price isn't what a buyer gets.
+
+## Next
+
+- **Micro-cap mode:** a lower liquidity floor (about $10–25k) with median exits, a rug rule (pool loses > 80% of liquidity → −100%), the market cap and liquidity at the call on every signal, a separate micro-cap leaderboard, and a check of the caller's own wallet (bought before posting, sold into followers).
+- Weekly periods, the contract locked or upgraded only by a DAO, and late access through an OutLayer TEE instead of the creator's browser.
 
 ## Repo
 
 | Path | What |
 | --- | --- |
-| `contract/` | NEAR contract + 30 unit tests |
+| `contract/` | NEAR contract + 38 unit tests |
 | `scorer/` | OutLayer job (wasm32-wasip2) + 12 unit tests |
 | `web/` | React app (Vite) |
 | `scripts/` | `sc.mjs` (seal / open / view), `testnet.sh` (deploy, e2e, settle), `sample-signals.mjs` |
