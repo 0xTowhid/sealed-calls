@@ -2,6 +2,10 @@
 import { timelockEncrypt, timelockDecrypt, mainnetClient, Buffer } from "tlock-js";
 import sodium from "libsodium-wrappers";
 import { CONTRACT } from "./config";
+
+// tlock-js (and its age/drand dependencies) expect Node's global Buffer at call time.
+const g = globalThis as unknown as { Buffer?: typeof Buffer };
+g.Buffer ??= Buffer;
 import type { Signal, SignalBody } from "./types";
 
 const QUICKNET_GENESIS_S = 1692803367;
