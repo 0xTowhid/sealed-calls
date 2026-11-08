@@ -1,5 +1,59 @@
-// Market search and live prices from public, keyless APIs (Hyperliquid, GeckoTerminal).
+// Market search and live prices from public, keyless APIs: Hyperliquid for perps, DexScreener for
+// finding DEX tokens and their prices (generous rate limit), GeckoTerminal for candles (the same
+// source the scorer uses). GeckoTerminal's free API allows ~30 calls a minute per browser, so every
+// call to it goes through one paced, cached queue.
 import { GT, HL } from "./config";
+
+const DS = "https://api.dexscreener.com/latest/dex";
+/** DexScreener chain id -> GeckoTerminal network id (the scorer's). */
+const DS_TO_GT: Record<string, string> = { ethereum: "eth", polygon: "polygon_pos", avalanche: "avax" };
+const gtNet = (chain: string) => DS_TO_GT[chain] ?? chain;
+
+const gtCache = new Map<string, { at: number; p: Promise<Response> }>();
+let gtNext = 0;
+/** GeckoTerminal fetch: one request every 2.2 s at most, cached for a minute, one retry after a 429. */
+export function gtFetch(url: string): Promise<Response> {
+  const hit = gtCache.get(url);
+  if (hit && Date.now() - hit.at < 60_000) return hit.p.then((r) => r.clone());
+  const run = async (): Promise<Response> => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const wait = Math.max(0, gtNext - Date.now());
+      gtNext = Math.max(gtNext, Date.now()) + 2_200;
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      const r = await fetch(url);
+      if (r.status !== 429) return r;
+      gtNext = Date.now() + 6_000;
+    }
+    return fetch(url);
+  };
+  const p = run();
+  gtCache.set(url, { at: Date.now(), p });
+  p.then((r) => { if (!r.ok) gtCache.delete(url); }).catch(() => gtCache.delete(url));
+  return p.then((r) => r.clone());
+}
+
+type DsPair = { chainId: string; pairAddress: string; baseToken: { address: string; symbol: string }; quoteToken: { address: string; symbol: string }; priceUsd?: string; liquidity?: { usd?: number }; fdv?: number; marketCap?: number };
+
+/** Best (deepest) DexScreener pair per token, paired with a major. */
+function dsFound(pairs: DsPair[], match: (p: DsPair) => boolean): Found[] {
+  const best = new Map<string, Found>();
+  for (const p of pairs) {
+    if (!match(p) || !MAJORS.has((p.quoteToken?.symbol ?? "").toUpperCase())) continue;
+    const net = gtNet(p.chainId);
+    const liq = p.liquidity?.usd ?? 0;
+    const key = `${net}:${p.baseToken.address}`;
+    if ((best.get(key)?.liquidity ?? -1) >= liq) continue;
+    best.set(key, {
+      market: { venue: "gecko", network: net, address: p.baseToken.address, symbol: p.baseToken.symbol },
+      label: `${networkName(net)} DEX`,
+      price: Number(p.priceUsd) || null,
+      liquidity: liq,
+      mcap: p.marketCap || p.fdv || null,
+      maxLeverage: 1,
+    });
+  }
+  return [...best.values()].sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0));
+}
 import type { Market } from "./types";
 
 export type Found = { market: Market; label: string; price: number | null; liquidity: number | null; mcap: number | null; maxLeverage: number };
@@ -33,7 +87,7 @@ const EVM_NETS = ["eth", "base", "bsc", "arbitrum", "robinhood"];
 
 /** Pools of one token on one network, paired with a major; best (deepest) as a Found. */
 async function tokenOnNetwork(net: string, addr: string): Promise<Found | "none" | "limited"> {
-  const r = await fetch(`${GT}/networks/${net}/tokens/${addr}/pools?include=base_token,quote_token`);
+  const r = await gtFetch(`${GT}/networks/${net}/tokens/${addr}/pools?include=base_token,quote_token`);
   if (r.status === 429) return "limited";
   if (!r.ok) return "none";
   const j = await r.json();
@@ -65,6 +119,11 @@ export async function searchMarkets(q: string): Promise<Search> {
 
   // A token address: look it up directly (search doesn't always index new tokens).
   if (isSolAddr(query) || isEvmAddr(query)) {
+    try {
+      const j = await (await fetch(`${DS}/tokens/${query}`)).json();
+      const f = dsFound((j.pairs ?? []) as DsPair[], (p) => p.baseToken.address.toLowerCase() === query.toLowerCase());
+      if (f.length) return { results: f.slice(0, 3), note: null };
+    } catch { /* fall back to GeckoTerminal */ }
     for (const net of isSolAddr(query) ? ["solana"] : EVM_NETS) {
       try {
         const f = await tokenOnNetwork(net, query);
@@ -73,7 +132,7 @@ export async function searchMarkets(q: string): Promise<Search> {
       } catch { limited = true; }
     }
     const note = out.length ? null : limited
-      ? "GeckoTerminal is rate-limiting this browser. Wait a minute and try again."
+      ? "The price service is busy. Wait a minute and try again."
       : "No pool for this token paired with SOL, ETH, USDC, USDT or USDG was found (checked Solana, Ethereum, Base, BNB Chain, Arbitrum and Robinhood Chain). Sealed Calls only scores tokens with such a pool.";
     return { results: out, note };
   }
@@ -88,33 +147,10 @@ export async function searchMarkets(q: string): Promise<Search> {
     }
   } catch { /* Hyperliquid unreachable: DEX results only */ }
   try {
-    const r = await fetch(`${GT}/search/pools?query=${encodeURIComponent(query)}&include=base_token,quote_token`);
-    if (r.status === 429) limited = true;
-    const j = r.ok ? await r.json() : {};
-    const inc = new Map<string, { symbol: string; address: string }>();
-    for (const t of j.included ?? []) inc.set(t.id, { symbol: String(t.attributes?.symbol ?? ""), address: String(t.attributes?.address ?? "") });
-    const best = new Map<string, Found>();
-    for (const p of j.data ?? []) {
-      const net = p.relationships?.network?.data?.id as string;
-      const base = inc.get(p.relationships?.base_token?.data?.id);
-      const quote = inc.get(p.relationships?.quote_token?.data?.id);
-      if (!net || !base || !quote || !MAJORS.has(quote.symbol.toUpperCase())) continue;
-      if (!base.symbol.toUpperCase().startsWith(up)) continue;
-      const liq = Number(p.attributes?.reserve_in_usd) || 0;
-      const key = `${net}:${base.address}`;
-      if ((best.get(key)?.liquidity ?? -1) >= liq) continue;
-      best.set(key, {
-        market: { venue: "gecko", network: net, address: base.address, symbol: base.symbol },
-        label: `${networkName(net)} DEX`,
-        price: Number(p.attributes?.base_token_price_usd) || null,
-        liquidity: liq,
-        mcap: Number(p.attributes?.market_cap_usd) || Number(p.attributes?.fdv_usd) || null,
-        maxLeverage: 1,
-      });
-    }
-    out.push(...[...best.values()].sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0)).slice(0, 5));
+    const j = await (await fetch(`${DS}/search?q=${encodeURIComponent(query)}`)).json();
+    out.push(...dsFound((j.pairs ?? []) as DsPair[], (p) => p.baseToken.symbol.toUpperCase().startsWith(up)).slice(0, 5));
   } catch { limited = true; }
-  const note = out.length ? null : limited ? "GeckoTerminal is rate-limiting this browser. Wait a minute and try again." : `Nothing found for “${query}”. Try the ticker of a Hyperliquid perp, or paste the token's address.`;
+  const note = out.length ? null : limited ? "The price service is busy. Wait a minute and try again." : `Nothing found for “${query}”. Try the ticker of a Hyperliquid perp, or paste the token's address.`;
   return { results: out, note };
 }
 
@@ -122,9 +158,9 @@ export async function searchMarkets(q: string): Promise<Search> {
 export async function priceOf(m: Market): Promise<number | null> {
   try {
     if (m.venue === "hyperliquid") return Number((await hl()).mids[m.address]) || null;
-    const j = await (await fetch(`${GT}/simple/networks/${m.network}/token_price/${m.address}`)).json();
-    const v = Object.values(j?.data?.attributes?.token_prices ?? {})[0];
-    return v ? Number(v) : null;
+    const j = await (await fetch(`${DS}/tokens/${m.address}`)).json();
+    const f = dsFound((j.pairs ?? []) as DsPair[], (p) => p.baseToken.address.toLowerCase() === m.address.toLowerCase() && gtNet(p.chainId) === m.network);
+    return f[0]?.price ?? null;
   } catch {
     return null;
   }
@@ -142,10 +178,9 @@ export async function mcapAtCall(m: Market, priceAtCall: number): Promise<number
   if (m.venue === "hyperliquid" || !(priceAtCall > 0)) return null;
   const key = `${m.network}:${m.address}`;
   if (!tokenInfo.has(key)) {
-    tokenInfo.set(key, fetch(`${GT}/networks/${m.network}/tokens/${m.address}`).then((r) => r.json()).then((j) => {
-      const a = j?.data?.attributes ?? {};
-      const price = Number(a.price_usd), fdv = Number(a.market_cap_usd) || Number(a.fdv_usd);
-      return price > 0 && fdv > 0 ? { price, fdv } : null;
+    tokenInfo.set(key, fetch(`${DS}/tokens/${m.address}`).then((r) => r.json()).then((j) => {
+      const f = dsFound((j.pairs ?? []) as DsPair[], (p) => p.baseToken.address.toLowerCase() === m.address.toLowerCase() && gtNet(p.chainId) === m.network)[0];
+      return f && f.price && f.mcap ? { price: f.price, fdv: f.mcap } : null;
     }).catch(() => null));
   }
   const info = await tokenInfo.get(key)!;

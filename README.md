@@ -124,7 +124,7 @@ Creators get a shareable page at `/#/@<account>` with their record, money, and t
 - [tlock-js](https://github.com/drand/tlock-js) (drand timelock encryption), [libsodium.js](https://github.com/jedisct1/libsodium.js)
 - React, Vite, Archivo and JetBrains Mono (fontsource)
 - Patterns from [OutLayer's proxy-contract tutorial](https://github.com/fastnear/near-outlayer/blob/main/wasi-examples/PROXY_CONTRACTS_TUTORIAL.md)
-- Price data: [Hyperliquid info API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint), [GeckoTerminal API](https://www.geckoterminal.com/dex-api)
+- Price data: [Hyperliquid info API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint), [GeckoTerminal API](https://www.geckoterminal.com/dex-api) (scoring and candles), [DexScreener API](https://docs.dexscreener.com/api/reference) (token search and live prices in the app)
 
 ## License
 

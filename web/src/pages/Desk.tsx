@@ -117,7 +117,7 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
     if (!q.trim() || sel) return;
     setSearching(true);
     setNote(null);
-    const t = setTimeout(() => searchMarkets(q).then((r) => { setFound(r.results); setNote(r.note); }).finally(() => setSearching(false)), 350);
+    const t = setTimeout(() => searchMarkets(q).then((r) => { setFound(r.results); setNote(r.note); }).finally(() => setSearching(false)), 600);
     return () => clearTimeout(t);
   }, [q, sel]);
   useEffect(() => {

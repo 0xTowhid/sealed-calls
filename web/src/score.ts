@@ -2,6 +2,7 @@
 // (scorer/src/lib.rs), on the same public candles. The official result is the one OutLayer writes
 // to the contract at settlement; this only lets people follow a signal while it runs.
 import { GT, HL, HL_TAKER_FEE } from "./config";
+import { gtFetch } from "./markets";
 import type { SignalBody } from "./types";
 
 type Candle = { t: number; high: number; low: number; close: number }; // t in ms
@@ -25,7 +26,7 @@ const pools = new Map<string, { pool: string; liq: number; fee: number }>();
 async function gtCandles(network: string, token: string, from: number, to: number): Promise<{ candles: Candle[]; liq: number; fee: number }> {
   const key = `${network}:${token}`;
   if (!pools.has(key)) {
-    const j = await (await fetch(`${GT}/networks/${network}/tokens/${token}/pools`)).json();
+    const j = await (await gtFetch(`${GT}/networks/${network}/tokens/${token}/pools`)).json();
     const best = (j.data ?? []).map((p: { attributes: Record<string, string> }) => ({ pool: p.attributes.address, liq: Number(p.attributes.reserve_in_usd) || 0, fee: Number(p.attributes.pool_fee_percentage) / 100 || 0.0025 }))
       .sort((a: { liq: number }, b: { liq: number }) => b.liq - a.liq)[0];
     if (!best) throw new Error("no pool");
@@ -34,7 +35,7 @@ async function gtCandles(network: string, token: string, from: number, to: numbe
   const p = pools.get(key)!;
   const minutes = Math.ceil((to - from) / 60_000);
   const [tf, agg] = minutes <= 1000 ? ["minute", 1] : minutes <= 5000 ? ["minute", 5] : ["minute", 15];
-  const j = await (await fetch(`${GT}/networks/${network}/pools/${p.pool}/ohlcv/${tf}?aggregate=${agg}&limit=1000&before_timestamp=${Math.floor(to / 1000)}&currency=usd&token=${token}`)).json();
+  const j = await (await gtFetch(`${GT}/networks/${network}/pools/${p.pool}/ohlcv/${tf}?aggregate=${agg}&limit=1000&before_timestamp=${Math.floor(to / 1000)}&currency=usd&token=${token}`)).json();
   const list = (j?.data?.attributes?.ohlcv_list ?? []) as number[][];
   return { candles: list.map((c) => ({ t: c[0] * 1000, high: +c[2], low: +c[3], close: +c[4] })), liq: p.liq, fee: p.fee };
 }
