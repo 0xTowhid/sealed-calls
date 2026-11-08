@@ -41,6 +41,7 @@ async function gtCandles(network: string, token: string, from: number, to: numbe
 
 /** Replays a signal from its posting to min(now, end of validity). */
 export async function replay(b: SignalBody, postedMs: number, validMin: number, now = Date.now()): Promise<Live> {
+  const micro = b.market.venue === "gecko_micro";
   const end = Math.min(now, postedMs + validMin * 60_000);
   let candles: Candle[];
   let cIn: number, cOut: number;
@@ -63,6 +64,7 @@ export async function replay(b: SignalBody, postedMs: number, validMin: number, 
   const part = (exit: number) => (Number.isNaN(exit) ? -1 : Math.max(-1, lev * (long ? exit / fill - 1 : 1 - exit / fill) - lev * (cIn + cOut)));
   const exits: number[] = [];
   let hit = 0;
+  let streak = 0; // micro-caps: a TP needs two closes in a row beyond it
   const done = (outcome: string): Live => ({ state: "closed", outcome, fill, fillAt: w[fi].t, last, r: exits.map(part).reduce((a, x) => a + x, 0) / exits.length });
   for (const c of w.slice(fi + 1)) {
     if (long ? lev > 1 && c.low <= liq : c.high >= liq) {
@@ -73,11 +75,19 @@ export async function replay(b: SignalBody, postedMs: number, validMin: number, 
       while (exits.length < tps.length) exits.push(c.close);
       return done(hit ? `TP${hit} + SL` : "SL");
     }
-    while (hit < tps.length && (long ? c.close >= tps[hit] : c.close <= tps[hit])) { exits.push(tps[hit]); hit++; }
+    const beyond = (tp: number) => (long ? c.close >= tp : c.close <= tp);
+    streak = hit < tps.length && beyond(tps[hit]) ? streak + 1 : 0;
+    if (streak >= (micro ? 2 : 1)) { while (hit < tps.length && beyond(tps[hit])) { exits.push(tps[hit]); hit++; } streak = 0; }
     if (hit === tps.length) return done(`TP${hit}`);
   }
-  // still open: mark the rest at the last close
-  while (exits.length < tps.length) exits.push(last ?? fill);
+  // still open: mark the rest at the last close (micro-caps at expiry: median of the last 30 minutes, or the lowest close)
+  let mark = last ?? fill;
+  if (micro && now >= postedMs + validMin * 60_000 && w.length) {
+    const from = w[w.length - 1].t - 1_800_000;
+    const tail = w.filter((c) => c.t >= from).map((c) => c.close).sort((a, c) => a - c);
+    mark = tail.length >= 10 ? (tail.length % 2 ? tail[(tail.length - 1) / 2] : (tail[tail.length / 2 - 1] + tail[tail.length / 2]) / 2) : tail[0] ?? mark;
+  }
+  while (exits.length < tps.length) exits.push(mark);
   const r = exits.map(part).reduce((a, x) => a + x, 0) / exits.length;
   const ended = now >= postedMs + validMin * 60_000;
   return { state: ended ? "closed" : "open", outcome: ended ? (hit ? `TP${hit} + expired` : "expired") : hit ? `TP${hit} hit, rest open` : "open", fill, fillAt: w[fi].t, last, r };

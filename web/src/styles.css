@@ -263,3 +263,8 @@ table.record th { padding: 8px 6px; }
 .card.mini .levels div:nth-child(odd) { border-left: 0; padding-left: 0; }
 .notice.spot { margin: 16px 0 0; background: #fff; }
 .liveline { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--rule); font-size: 14px; }
+
+/* micro-cap mode */
+.micro { display: inline-block; font: 800 11px/1.5 Archivo, sans-serif; letter-spacing: .02em; background: #7a3eb1; color: #fff; padding: 1px 6px; border-radius: 2px; vertical-align: 2px; font-stretch: 100%; }
+.notice.micro-box { margin: 16px 0 0; background: #f3ecfa; border-color: #7a3eb1; }
+.notice.micro-box ul { margin: 8px 0 8px 18px; padding: 0; }

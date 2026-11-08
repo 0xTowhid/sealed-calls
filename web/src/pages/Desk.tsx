@@ -3,10 +3,12 @@ import { call, currentPeriod, getConfig, listChannels, periodHeld, readersNow, s
 import { useLoad, useNow } from "../data";
 import { dur, near, pct, periodWord, planName, price, sig, when } from "../format";
 import { creatorSecret, exportSecret, importSecret, openWithKey, seal, signalKey, wrapFor } from "../crypto";
-import { priceOf, searchMarkets, type Found } from "../markets";
+import { priceOf, searchMarkets, usdShort, type Found } from "../markets";
+import { MicroTag } from "../ui";
 import { Act, SignalFace } from "../ui";
 import { GAS_100, HL_TAKER_FEE, NEAR } from "../config";
 import type { Channel, Signal, SignalBody } from "../types";
+import { MICRO_FLOOR_USD } from "../types";
 import { isSealed, opensAt } from "../types";
 
 async function load(account: string) {
@@ -125,7 +127,9 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
     return () => clearInterval(t);
   }, [sel]);
 
-  const dex = sel?.market.venue === "gecko";
+  const dex = !!sel && sel.market.venue !== "hyperliquid";
+  const micro = dex && sel!.liquidity != null && sel!.liquidity < floorUsd;
+  const tooThin = dex && sel!.liquidity != null && sel!.liquidity < MICRO_FLOOR_USD;
   const eSide = dex ? "long" : side;
   const eLev = dex ? 1 : lev;
   const maxLev = sel?.maxLeverage ?? 50;
@@ -134,6 +138,7 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
 
   const problem = useMemo(() => {
     if (!sel) return "Pick a market.";
+    if (tooThin) return `Pools under ${usdShort(MICRO_FLOOR_USD)} liquidity can't be called.`;
     const [l, h, s] = [num(lo), num(hi || lo), num(sl)];
     const t = tpList.map(num);
     if ([l, h, s, ...t].some((x) => !(x > 0))) return "Fill in the buy range, at least one take-profit and the stop loss.";
@@ -149,10 +154,10 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
     if (validMin < 15 || validMin > 43_200) return "Validity must be between 15 minutes and 30 days.";
     if (eLev < 1 || eLev > maxLev) return `Leverage must be 1–${maxLev}x on this market.`;
     return null;
-  }, [sel, lo, hi, sl, tpList, eSide, validMin, eLev, maxLev]);
+  }, [sel, lo, hi, sl, tpList, eSide, validMin, eLev, maxLev, tooThin]);
 
   const body: SignalBody | null = sel
-    ? { market: sel.market, side: eSide, leverage: eLev, entry_low: clean(lo), entry_high: clean(hi || lo), tps: tpList, sl: clean(sl), msg: msg.trim() }
+    ? { market: { ...sel.market, venue: micro ? "gecko_micro" : sel.market.venue }, side: eSide, leverage: eLev, entry_low: clean(lo), entry_high: clean(hi || lo), tps: tpList, sl: clean(sl), msg: msg.trim() }
     : null;
 
   // What-if numbers at the middle of the range (same formula as the scorer).
@@ -188,17 +193,27 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
           <div className="drop" role="listbox">
             {found.map((f, i) => (
               <button key={i} role="option" onClick={() => { setSel(f); setFound([]); if (f.market.venue === "gecko") setLev(1); }}>
-                <span><b>{f.market.symbol}</b> {f.label}</span>
-                <span className="sub0">{f.price ? `$${price(sig(f.price))}` : ""}{f.liquidity ? ` · pool $${(f.liquidity / 1e6).toFixed(1)}M` : ""} · {f.market.venue === "hyperliquid" ? `long or short, up to ${f.maxLeverage}x` : "long, 1x"}</span>
+                <span><b>{f.market.symbol}</b> {f.label}{f.liquidity != null && f.liquidity < floorUsd && f.liquidity >= MICRO_FLOOR_USD && <> <MicroTag /></>}</span>
+                <span className="sub0">{f.price ? `$${price(sig(f.price))}` : ""}{f.mcap ? ` · mcap ${usdShort(f.mcap)}` : ""}{f.liquidity ? ` · pool ${usdShort(f.liquidity)}` : ""} · {f.market.venue === "hyperliquid" ? `long or short, up to ${f.maxLeverage}x` : "long, 1x"}</span>
               </button>
             ))}
           </div>
         )}
         {!sel && q.trim() && searching && <div className="hint">Searching Hyperliquid and DEX pools…</div>}
         {!sel && q.trim() && !searching && note && <div className="hint bad">{note}</div>}
-        {sel && sel.liquidity != null && sel.liquidity < floorUsd && <div className="hint bad">This pool has under ${(floorUsd / 1000).toFixed(0)}k liquidity: the signal would score −100%.</div>}
+        {tooThin && <div className="hint bad">This pool has under {usdShort(MICRO_FLOOR_USD)} liquidity. Pools that thin can't be called, even as micro-cap signals.</div>}
 
-        {dex ? (
+        {dex && micro && !tooThin ? (
+          <div className="notice micro-box">
+            <b>Micro-cap signal · spot buy, 1x.</b> This pool has {usdShort(sel!.liquidity!)} liquidity, under the {usdShort(floorUsd)} floor for normal signals, so it's scored with stricter rules:
+            <ul>
+              <li>a take-profit counts only after <b>two closes in a row</b> beyond it</li>
+              <li>if it runs to the end, it exits at the <b>median of the last 30 minutes</b>, not the last tick</li>
+              <li>buying and selling $500 here costs about <b>{Math.round(200 * (0.0025 + 500 / (0.5 * sel!.liquidity!)))}% in fees and price impact</b></li>
+            </ul>
+            <div className="small sub0">Micro-cap results are labelled and ranked separately from normal signals. Pools under {usdShort(MICRO_FLOOR_USD)} can't be called.</div>
+          </div>
+        ) : dex ? (
           <div className="notice spot">
             <b>Spot buy · 1x.</b> {sel?.market.symbol} trades on a {sel?.label}: a signal on it is a buy, with no short and no leverage. Scoring adds the pool fee and the price impact of a $500 buy and sell.
           </div>

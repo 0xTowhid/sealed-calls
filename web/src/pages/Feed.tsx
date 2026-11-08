@@ -4,7 +4,7 @@ import { useLoad, useNow } from "../data";
 import { costPct, near, price, sig, when } from "../format";
 import { loadMemberKey, memberOpen, newMemberKey, type Opened } from "../crypto";
 import { priceOf } from "../markets";
-import { Act, Countdown, LiveLine, MarketLinks, Outcome, Result, SignalFace, rangeState } from "../ui";
+import { Act, Countdown, LiveLine, MarketLinks, McapAtCall, Outcome, Result, SignalFace, rangeState } from "../ui";
 import type { Channel, Member, Signal } from "../types";
 import { isSealed, opensAt } from "../types";
 
@@ -123,6 +123,7 @@ function FeedCard({ s, name, now, account, opened, live }: { s: Signal; name: st
           {body ? (
             <>
               <SignalFace b={body} validUntil={opensAt(s)} />
+              <McapAtCall b={body} />
               <LiveLine b={body} postedMs={s.posted_at_ms} validMin={s.valid_min} />
               <div className="live">
                 {live != null && <span>Now <b>{price(sig(live))}</b>, {rangeState(body, live)}</span>}

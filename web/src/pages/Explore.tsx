@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { allSignals, getConfig, listChannels, subscribers } from "../near";
 import { record, useLoad } from "../data";
 import { near, pct, periodWord, planName } from "../format";
 import { TickLegend, Ticks } from "../ui";
+import { mcapAtCall, usdShort } from "../markets";
 import type { Channel, Config, Signal } from "../types";
 
 type Row = { ch: Channel; signals: Signal[]; subs: number; rec: ReturnType<typeof record> };
@@ -21,11 +22,16 @@ async function loadAll(): Promise<{ cfg: Config; rows: Row[] }> {
 
 export function Explore() {
   const { data, error } = useLoad(loadAll, [], 30_000, "explore");
-  const [filter, setFilter] = useState<"all" | "perp" | "dex">("all");
+  const [filter, setFilter] = useState<"all" | "perp" | "dex" | "micro">("all");
   const word = data ? periodWord(data.cfg.period_minutes) : "week";
+  const venueOf = { perp: "hyperliquid", dex: "gecko", micro: "gecko_micro" } as const;
   const rows = (data?.rows ?? []).filter(
-    (r) => filter === "all" || r.signals.some((s) => s.body && (filter === "perp" ? s.body.market.venue === "hyperliquid" : s.body.market.venue === "gecko")),
+    (r) => filter === "all" || r.signals.some((s) => s.body && s.body.market.venue === venueOf[filter]),
   );
+  // Micro-caps are ranked only on their micro-cap signals.
+  const microRows = filter !== "micro" ? [] : rows
+    .map((r) => { const sigs = r.signals.filter((s) => s.body?.market.venue === "gecko_micro"); return { ...r, sigs, rec: record(r.ch, sigs) }; })
+    .sort((a, b) => (b.rec.score_bps ?? -1e9) - (a.rec.score_bps ?? -1e9) || b.rec.scored - a.rec.scored);
 
   return (
     <>
@@ -58,8 +64,8 @@ export function Explore() {
           <span className="sub0 small">Ranked by score: total result ÷ (signals + 5)</span>
         </div>
         <div className="chips" role="group" aria-label="Filter">
-          {(["all", "perp", "dex"] as const).map((f) => (
-            <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f === "perp" ? "Perps" : "DEX tokens"}</button>
+          {(["all", "perp", "dex", "micro"] as const).map((f) => (
+            <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>{{ all: "All", perp: "Perps", dex: "DEX tokens", micro: "Micro-caps" }[f]}</button>
           ))}
         </div>
         {error && <div className="notice err">{error}</div>}
@@ -67,7 +73,29 @@ export function Explore() {
         {data && rows.length === 0 && (
           <p className="empty">No creators yet. <a href="#/desk">Open the creator desk</a> to start a channel.</p>
         )}
-        {rows.length > 0 && (
+        {filter === "micro" && microRows.length > 0 && (
+          <div className="scroll">
+            <table className="creators">
+              <thead><tr><th /><th>Creator</th><th>Micro-cap signals, oldest → newest</th><th className="n">Micro-cap signals</th><th className="n">Win rate</th><th className="n">Micro-cap score</th><th className="n">Avg mcap at call</th></tr></thead>
+              <tbody>
+                {microRows.map((r, i) => (
+                  <tr key={r.ch.id} onClick={() => (window.location.hash = `#/c/${r.ch.id}`)} className="click">
+                    <td className="rank">{i + 1}</td>
+                    <td><a href={`#/c/${r.ch.id}`} className="cname">{r.ch.name}</a><div className="sub0 small">{r.ch.creator}</div></td>
+                    <td><Ticks signals={r.sigs} /></td>
+                    <td className="n">{r.sigs.length}</td>
+                    <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
+                    <td className={`n score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</td>
+                    <td className="n"><AvgMcap signals={r.sigs} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="fine">Ranked only on micro-cap signals (pools under the normal liquidity floor, scored with stricter rules). The “All” tab ranks everything together.</p>
+          </div>
+        )}
+        {filter === "micro" && data && microRows.length === 0 && <p className="empty">No micro-cap signals yet.</p>}
+        {filter !== "micro" && rows.length > 0 && (
           <div className="scroll">
             <table className="creators">
               <thead>
@@ -98,4 +126,15 @@ export function Explore() {
       </section>
     </>
   );
+}
+
+function AvgMcap({ signals }: { signals: Signal[] }) {
+  const [v, setV] = useState<number | null>(null);
+  useEffect(() => {
+    const done = signals.filter((s) => s.body);
+    Promise.all(done.map((s) => mcapAtCall(s.body!.market, Number(s.fill_price ?? 0) || (Number(s.body!.entry_low) + Number(s.body!.entry_high)) / 2)))
+      .then((xs) => { const ok = xs.filter((x): x is number => x != null); setV(ok.length ? ok.reduce((a, x) => a + x, 0) / ok.length : null); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signals.map((s) => s.id).join(",")]);
+  return <>{v == null ? "—" : usdShort(v)}</>;
 }

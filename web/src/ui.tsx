@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { countdown, dur, outcomeKind, outcomeText, pct, price, sig, when } from "./format";
-import { chartUrl, venueLabel } from "./markets";
+import { chartUrl, mcapAtCall, usdShort, venueLabel } from "./markets";
 import type { Signal, SignalBody } from "./types";
 import { isSealed, opensAt } from "./types";
 
@@ -31,7 +31,7 @@ export function TickLegend() {
 }
 
 export function SideTag({ b }: { b: SignalBody }) {
-  if (b.market.venue === "gecko") return <span className="side long">SPOT BUY</span>;
+  if (b.market.venue !== "hyperliquid") return <span className="side long">SPOT BUY</span>;
   return <span className={`side ${b.side}`}>{b.side.toUpperCase()} {b.leverage}x</span>;
 }
 
@@ -51,7 +51,7 @@ export function SignalFace({ b, validUntil, size = "l" }: { b: SignalBody; valid
   return (
     <div className={`face ${size}`}>
       <div className="tok">
-        {b.market.venue === "gecko" ? <><span className="long">BUY</span> {b.market.symbol}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}{" "}
+        {b.market.venue !== "hyperliquid" ? <><span className="long">BUY</span> {b.market.symbol}{b.market.venue === "gecko_micro" && <> <MicroTag /></>}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}{" "}
         <span className="venue">{venueLabel(b.market)}</span>
       </div>
       <div className="levels">
@@ -171,4 +171,17 @@ export function LiveCells({ b, postedMs, validMin }: { b: SignalBody; postedMs: 
       <td className={`n ${r > 0 ? "gain" : r < 0 ? "loss" : "sub0"}`} title="Unofficial until settlement">≈ {r === 0 ? "0%" : signed(r)}</td>
     </>
   );
+}
+
+export function MicroTag() {
+  return <span className="micro" title="Micro-cap signal: pool under the normal liquidity floor; scored with stricter rules">MICRO</span>;
+}
+
+/** "called at ≈ $42k mcap" for a micro-cap signal. */
+export function McapAtCall({ b, fill }: { b: SignalBody; fill?: string | null }) {
+  const [v, setV] = useStateLive<number | null>(null);
+  const at = Number(fill ?? 0) || (Number(b.entry_low) + Number(b.entry_high)) / 2;
+  useEffectLive(() => { if (b.market.venue === "gecko_micro") mcapAtCall(b.market, at).then(setV); }, [b.market.address, at]);
+  if (b.market.venue !== "gecko_micro" || v == null) return null;
+  return <div className="small sub0">called at ≈ {usdShort(v)} mcap</div>;
 }

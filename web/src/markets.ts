@@ -2,7 +2,7 @@
 import { GT, HL } from "./config";
 import type { Market } from "./types";
 
-export type Found = { market: Market; label: string; price: number | null; liquidity: number | null; maxLeverage: number };
+export type Found = { market: Market; label: string; price: number | null; liquidity: number | null; mcap: number | null; maxLeverage: number };
 
 type HlMeta = { names: string[]; maxLev: Map<string, number>; mids: Record<string, string>; at: number };
 let hlCache: HlMeta | null = null;
@@ -50,7 +50,8 @@ async function tokenOnNetwork(net: string, addr: string): Promise<Found | "none"
     const liq = Number(p.attributes?.reserve_in_usd) || 0;
     if (best && (best.liquidity ?? 0) >= liq) continue;
     const priceUsd = Number(mine === b ? p.attributes?.base_token_price_usd : p.attributes?.quote_token_price_usd) || null;
-    best = { market: { venue: "gecko", network: net, address: mine.address, symbol: mine.symbol }, label: `${networkName(net)} DEX`, price: priceUsd, liquidity: liq, maxLeverage: 1 };
+    const mc = Number(p.attributes?.market_cap_usd) || Number(p.attributes?.fdv_usd) || null;
+    best = { market: { venue: "gecko", network: net, address: mine.address, symbol: mine.symbol }, label: `${networkName(net)} DEX`, price: priceUsd, liquidity: liq, mcap: mine === b ? mc : null, maxLeverage: 1 };
   }
   return best ?? "none";
 }
@@ -83,7 +84,7 @@ export async function searchMarkets(q: string): Promise<Search> {
     const hits = h.names.filter((n) => n.toUpperCase() === up || (up.length >= 2 && n.toUpperCase().startsWith(up)));
     hits.sort((a, b) => (a.toUpperCase() === up ? -1 : b.toUpperCase() === up ? 1 : a.length - b.length));
     for (const n of hits.slice(0, 3)) {
-      out.push({ market: { venue: "hyperliquid", address: n, symbol: n }, label: "perp · Hyperliquid", price: Number(h.mids[n]) || null, liquidity: null, maxLeverage: h.maxLev.get(n) ?? 20 });
+      out.push({ market: { venue: "hyperliquid", address: n, symbol: n }, label: "perp · Hyperliquid", price: Number(h.mids[n]) || null, liquidity: null, mcap: null, maxLeverage: h.maxLev.get(n) ?? 20 });
     }
   } catch { /* Hyperliquid unreachable: DEX results only */ }
   try {
@@ -107,6 +108,7 @@ export async function searchMarkets(q: string): Promise<Search> {
         label: `${networkName(net)} DEX`,
         price: Number(p.attributes?.base_token_price_usd) || null,
         liquidity: liq,
+        mcap: Number(p.attributes?.market_cap_usd) || Number(p.attributes?.fdv_usd) || null,
         maxLeverage: 1,
       });
     }
@@ -131,3 +133,23 @@ export async function priceOf(m: Market): Promise<number | null> {
 export function chartUrl(m: Market) {
   return m.venue === "hyperliquid" ? `https://app.hyperliquid.xyz/trade/${m.address}` : `https://www.geckoterminal.com/${m.network}/tokens/${m.address}`;
 }
+
+// ------------------------------------------------------------- market cap at the call (DEX tokens)
+const tokenInfo = new Map<string, Promise<{ price: number; fdv: number } | null>>();
+
+/** ≈ market cap when the signal was called: today's FDV scaled by (price at the call ÷ price now). */
+export async function mcapAtCall(m: Market, priceAtCall: number): Promise<number | null> {
+  if (m.venue === "hyperliquid" || !(priceAtCall > 0)) return null;
+  const key = `${m.network}:${m.address}`;
+  if (!tokenInfo.has(key)) {
+    tokenInfo.set(key, fetch(`${GT}/networks/${m.network}/tokens/${m.address}`).then((r) => r.json()).then((j) => {
+      const a = j?.data?.attributes ?? {};
+      const price = Number(a.price_usd), fdv = Number(a.market_cap_usd) || Number(a.fdv_usd);
+      return price > 0 && fdv > 0 ? { price, fdv } : null;
+    }).catch(() => null));
+  }
+  const info = await tokenInfo.get(key)!;
+  return info ? (info.fdv * priceAtCall) / info.price : null;
+}
+
+export const usdShort = (x: number) => (x >= 1e9 ? `$${(x / 1e9).toFixed(1)}B` : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : x >= 1e3 ? `$${Math.round(x / 1e3)}k` : `$${Math.round(x)}`);

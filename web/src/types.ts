@@ -39,7 +39,11 @@ export type Channel = {
 };
 export type Sub = { start_ms: number; end_ms: number; held: string };
 export type Member = { until_ms: number; pubkey: string | null; subs: Sub[] };
-export type Market = { venue: "hyperliquid" | "gecko"; network?: string | null; address: string; symbol: string };
+export type Market = { venue: "hyperliquid" | "gecko" | "gecko_micro"; network?: string | null; address: string; symbol: string };
+export const isDex = (m: Market) => m.venue !== "hyperliquid";
+export const isMicro = (m: Market) => m.venue === "gecko_micro";
+/** Pools from this liquidity can be called as micro-cap signals (normal DEX signals use the contract's floor). */
+export const MICRO_FLOOR_USD = 10_000;
 export type SignalBody = {
   market: Market;
   side: "long" | "short";

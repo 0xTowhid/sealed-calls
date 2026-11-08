@@ -3,7 +3,7 @@ import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getM
 import { record, useLoad, useNow } from "../data";
 import { day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
 import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
-import { Act, Countdown, LiveCells, LiveLine, Outcome, Result, SideTag, rangeState } from "../ui";
+import { Act, Countdown, LiveCells, LiveLine, McapAtCall, MicroTag, Outcome, Result, SideTag, rangeState } from "../ui";
 import { priceOf, venueLabel } from "../markets";
 import { GAS_300, NEAR } from "../config";
 import type { Channel, PeriodResult, Signal } from "../types";
@@ -116,7 +116,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                     return (
                       <tr key={s.id} className={isSealed(s) ? "sealed" : ""}>
                         <td>{when(s.posted_at_ms)}</td>
-                        <td>{b ? <><b className="mk">{b.market.symbol}</b> <span className="venue">{venueLabel(b.market)}</span></> : <b>{isSealed(s) ? "sealed" : "—"}</b>}</td>
+                        <td>{b ? <><b className="mk">{b.market.symbol}</b> <span className="venue">{venueLabel(b.market)}</span>{b.market.venue === "gecko_micro" && <> <MicroTag /></>}<McapAtCall b={b} fill={s.fill_price} /></> : <b>{isSealed(s) ? "sealed" : "—"}</b>}</td>
                         <td>{b ? <SideTag b={b} /> : "—"}</td>
                         <td>{b ? `${price(b.entry_low)}–${price(b.entry_high)}` : "—"}</td>
                         <td>{b ? b.tps.map(price).join(" · ") : "—"}</td>
@@ -276,7 +276,7 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
             <div className="bd">
               {b ? (
                 <>
-                  <div className="face m"><div className="tok">{b.market.venue === "gecko" ? <><span className="long">BUY</span> {b.market.symbol}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}</div></div>
+                  <div className="face m"><div className="tok">{b.market.venue !== "hyperliquid" ? <><span className="long">BUY</span> {b.market.symbol}{b.market.venue === "gecko_micro" && <> <MicroTag /></>}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}</div></div>
                   <div className="levels">
                     <div><span>{b.side === "short" ? "Sell" : "Buy"}</span><b>{price(b.entry_low)}–{price(b.entry_high)}</b></div>
                     <div><span>TP</span><b>{b.tps.map(price).join(" · ")}</b></div>
