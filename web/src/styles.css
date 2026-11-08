@@ -261,3 +261,4 @@ table.record th { padding: 8px 6px; }
 @media (max-width: 640px) { .money { grid-template-columns: 1fr 1fr; } .money div:nth-child(3) { border-left: 0; padding-left: 0; } .owner-head { flex-direction: column; } }
 .card.mini .levels { grid-template-columns: 1fr 1fr; }
 .card.mini .levels div:nth-child(odd) { border-left: 0; padding-left: 0; }
+.notice.spot { margin: 16px 0 0; background: #fff; }

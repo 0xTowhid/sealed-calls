@@ -25,12 +25,59 @@ export function venueLabel(m: Market) {
   return m.venue === "hyperliquid" ? "Hyperliquid perp" : `${networkName(m.network)} DEX`;
 }
 
+export type Search = { results: Found[]; note: string | null };
+
+const isSolAddr = (q: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+const isEvmAddr = (q: string) => /^0x[0-9a-fA-F]{40}$/.test(q);
+const EVM_NETS = ["eth", "base", "bsc", "arbitrum"];
+
+/** Pools of one token on one network, paired with a major; best (deepest) as a Found. */
+async function tokenOnNetwork(net: string, addr: string): Promise<Found | "none" | "limited"> {
+  const r = await fetch(`${GT}/networks/${net}/tokens/${addr}/pools?include=base_token,quote_token`);
+  if (r.status === 429) return "limited";
+  if (!r.ok) return "none";
+  const j = await r.json();
+  const inc = new Map<string, { symbol: string; address: string }>();
+  for (const t of j.included ?? []) inc.set(t.id, { symbol: String(t.attributes?.symbol ?? ""), address: String(t.attributes?.address ?? "") });
+  let best: Found | null = null;
+  for (const p of j.data ?? []) {
+    const b = inc.get(p.relationships?.base_token?.data?.id);
+    const q = inc.get(p.relationships?.quote_token?.data?.id);
+    if (!b || !q) continue;
+    const mine = b.address.toLowerCase() === addr.toLowerCase() ? b : q.address.toLowerCase() === addr.toLowerCase() ? q : null;
+    const other = mine === b ? q : b;
+    if (!mine || !MAJORS.has(other.symbol.toUpperCase())) continue;
+    const liq = Number(p.attributes?.reserve_in_usd) || 0;
+    if (best && (best.liquidity ?? 0) >= liq) continue;
+    const priceUsd = Number(mine === b ? p.attributes?.base_token_price_usd : p.attributes?.quote_token_price_usd) || null;
+    best = { market: { venue: "gecko", network: net, address: mine.address, symbol: mine.symbol }, label: `${networkName(net)} DEX`, price: priceUsd, liquidity: liq, maxLeverage: 1 };
+  }
+  return best ?? "none";
+}
+
 /** Hyperliquid perps first (exact, then prefix), then DEX tokens grouped by token, deepest pool first. */
-export async function searchMarkets(q: string): Promise<Found[]> {
+export async function searchMarkets(q: string): Promise<Search> {
   const query = q.trim();
-  if (!query) return [];
-  const up = query.toUpperCase();
+  if (!query) return { results: [], note: null };
   const out: Found[] = [];
+  let limited = false;
+
+  // A token address: look it up directly (search doesn't always index new tokens).
+  if (isSolAddr(query) || isEvmAddr(query)) {
+    for (const net of isSolAddr(query) ? ["solana"] : EVM_NETS) {
+      try {
+        const f = await tokenOnNetwork(net, query);
+        if (f === "limited") limited = true;
+        else if (f !== "none") out.push(f);
+      } catch { limited = true; }
+    }
+    const note = out.length ? null : limited
+      ? "GeckoTerminal is rate-limiting this browser. Wait a minute and try again."
+      : "No pool for this token paired with SOL, ETH, USDC or USDT was found. Sealed Calls only scores tokens with such a pool.";
+    return { results: out, note };
+  }
+
+  const up = query.toUpperCase();
   try {
     const h = await hl();
     const hits = h.names.filter((n) => n.toUpperCase() === up || (up.length >= 2 && n.toUpperCase().startsWith(up)));
@@ -40,7 +87,9 @@ export async function searchMarkets(q: string): Promise<Found[]> {
     }
   } catch { /* Hyperliquid unreachable: DEX results only */ }
   try {
-    const j = await (await fetch(`${GT}/search/pools?query=${encodeURIComponent(query)}&include=base_token,quote_token`)).json();
+    const r = await fetch(`${GT}/search/pools?query=${encodeURIComponent(query)}&include=base_token,quote_token`);
+    if (r.status === 429) limited = true;
+    const j = r.ok ? await r.json() : {};
     const inc = new Map<string, { symbol: string; address: string }>();
     for (const t of j.included ?? []) inc.set(t.id, { symbol: String(t.attributes?.symbol ?? ""), address: String(t.attributes?.address ?? "") });
     const best = new Map<string, Found>();
@@ -49,8 +98,7 @@ export async function searchMarkets(q: string): Promise<Found[]> {
       const base = inc.get(p.relationships?.base_token?.data?.id);
       const quote = inc.get(p.relationships?.quote_token?.data?.id);
       if (!net || !base || !quote || !MAJORS.has(quote.symbol.toUpperCase())) continue;
-      const isAddr = query.length > 25;
-      if (!(isAddr ? base.address.toLowerCase() === query.toLowerCase() : base.symbol.toUpperCase().startsWith(up))) continue;
+      if (!base.symbol.toUpperCase().startsWith(up)) continue;
       const liq = Number(p.attributes?.reserve_in_usd) || 0;
       const key = `${net}:${base.address}`;
       if ((best.get(key)?.liquidity ?? -1) >= liq) continue;
@@ -63,8 +111,9 @@ export async function searchMarkets(q: string): Promise<Found[]> {
       });
     }
     out.push(...[...best.values()].sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0)).slice(0, 5));
-  } catch { /* GeckoTerminal unreachable or rate-limited */ }
-  return out;
+  } catch { limited = true; }
+  const note = out.length ? null : limited ? "GeckoTerminal is rate-limiting this browser. Wait a minute and try again." : `Nothing found for “${query}”. Try the ticker of a Hyperliquid perp, or paste the token's address.`;
+  return { results: out, note };
 }
 
 /** Current USD price of a market, or null. */

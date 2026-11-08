@@ -270,7 +270,7 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
             <div className="bd">
               {b ? (
                 <>
-                  <div className="face m"><div className="tok"><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</div></div>
+                  <div className="face m"><div className="tok">{b.market.venue === "gecko" ? <><span className="long">BUY</span> {b.market.symbol}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}</div></div>
                   <div className="levels">
                     <div><span>{b.side === "short" ? "Sell" : "Buy"}</span><b>{price(b.entry_low)}–{price(b.entry_high)}</b></div>
                     <div><span>TP</span><b>{b.tps.map(price).join(" · ")}</b></div>

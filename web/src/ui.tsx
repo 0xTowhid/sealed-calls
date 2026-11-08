@@ -31,6 +31,7 @@ export function TickLegend() {
 }
 
 export function SideTag({ b }: { b: SignalBody }) {
+  if (b.market.venue === "gecko") return <span className="side long">SPOT BUY</span>;
   return <span className={`side ${b.side}`}>{b.side.toUpperCase()} {b.leverage}x</span>;
 }
 
@@ -50,7 +51,8 @@ export function SignalFace({ b, validUntil, size = "l" }: { b: SignalBody; valid
   return (
     <div className={`face ${size}`}>
       <div className="tok">
-        <span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x <span className="venue">{venueLabel(b.market)}</span>
+        {b.market.venue === "gecko" ? <><span className="long">BUY</span> {b.market.symbol}</> : <><span className={b.side}>{b.side.toUpperCase()}</span> {b.market.symbol} · {b.leverage}x</>}{" "}
+        <span className="venue">{venueLabel(b.market)}</span>
       </div>
       <div className="levels">
         <div><span>{sell ? "Sell" : "Buy"}</span><b>{price(b.entry_low)}–{price(b.entry_high)}</b></div>

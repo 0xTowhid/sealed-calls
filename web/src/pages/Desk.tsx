@@ -96,6 +96,8 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
   const now = useNow(10_000);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [sel, setSel] = useState<Found | null>(null);
   const [side, setSide] = useState<"long" | "short">("long");
   const [lev, setLev] = useState(5);
@@ -111,7 +113,9 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
 
   useEffect(() => {
     if (!q.trim() || sel) return;
-    const t = setTimeout(() => searchMarkets(q).then(setFound), 350);
+    setSearching(true);
+    setNote(null);
+    const t = setTimeout(() => searchMarkets(q).then((r) => { setFound(r.results); setNote(r.note); }).finally(() => setSearching(false)), 350);
     return () => clearTimeout(t);
   }, [q, sel]);
   useEffect(() => {
@@ -190,24 +194,30 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
             ))}
           </div>
         )}
-        {!sel && q.trim() && found.length === 0 && <div className="hint">Searching Hyperliquid and DEX pools…</div>}
+        {!sel && q.trim() && searching && <div className="hint">Searching Hyperliquid and DEX pools…</div>}
+        {!sel && q.trim() && !searching && note && <div className="hint bad">{note}</div>}
         {sel && sel.liquidity != null && sel.liquidity < 100_000 && <div className="hint bad">This pool has under $100k liquidity: the signal would score −100%.</div>}
 
-        <div className="two">
-          <div>
-            <label>Direction</label>
-            <div className="seg dir">
-              <button aria-pressed={eSide === "long"} className="l" onClick={() => setSide("long")}>Long</button>
-              <button aria-pressed={eSide === "short"} className="s" disabled={dex} onClick={() => setSide("short")}>Short</button>
+        {dex ? (
+          <div className="notice spot">
+            <b>Spot buy · 1x.</b> {sel?.market.symbol} trades on a {sel?.label}: a signal on it is a buy, with no short and no leverage. Scoring adds the pool fee and the price impact of a $500 buy and sell.
+          </div>
+        ) : (
+          <div className="two">
+            <div>
+              <label>Direction</label>
+              <div className="seg dir">
+                <button aria-pressed={eSide === "long"} className="l" onClick={() => setSide("long")}>Long</button>
+                <button aria-pressed={eSide === "short"} className="s" onClick={() => setSide("short")}>Short</button>
+              </div>
             </div>
-            {dex && <div className="hint">DEX tokens are long only.</div>}
+            <div>
+              <label htmlFor="lev">Leverage <b className="right">{eLev}x</b></label>
+              <input id="lev" type="range" min={1} max={maxLev} value={eLev} onChange={(e) => setLev(Number(e.target.value))} />
+              <div className="hint row-between"><span>1x</span><span>{maxLev}x</span></div>
+            </div>
           </div>
-          <div>
-            <label htmlFor="lev">Leverage <b className="right">{eLev}x</b></label>
-            <input id="lev" type="range" min={1} max={dex ? 1 : maxLev} value={eLev} disabled={dex} onChange={(e) => setLev(Number(e.target.value))} />
-            <div className="hint row-between"><span>1x</span><span>{dex ? "1x" : `${maxLev}x`}</span></div>
-          </div>
-        </div>
+        )}
 
         <label>{eSide === "long" ? "Buy" : "Sell"} range</label>
         <div className="two"><input type="text" inputMode="decimal" placeholder="from" value={lo} onChange={(e) => setLo(e.target.value)} /><input type="text" inputMode="decimal" placeholder="to (optional)" value={hi} onChange={(e) => setHi(e.target.value)} /></div>
@@ -242,9 +252,9 @@ function Compose({ ch, account, subs, held, periodMinutes }: { ch: Channel; acco
         <div className="sub0 small" style={{ marginBottom: 8 }}>What your {readers} subscriber{readers === 1 ? "" : "s"} see now</div>
         <div className="card fresh">
           <div className="tape" />
-          <div className="hd"><span><b>{ch.name}</b> · just now</span><span>public in <b className="mono">{validMin ? `${Math.floor(validMin / 60)}:${String(validMin % 60).padStart(2, "0")}:00` : "—"}</b></span></div>
+          <div className="hd"><span><b>{ch.name}</b> · just now</span><span>{validMin ? <>public after <b>{dur(validMin)}</b>, {when(now + validMin * 60_000)}</> : "—"}</span></div>
           <div className="bd">
-            {body ? <SignalFace b={{ ...body, entry_low: body.entry_low || "…", entry_high: body.entry_high || "…", sl: body.sl || "…", tps: body.tps.length ? body.tps : ["…"] }} validUntil={now + validMin * 60_000} /> : <p className="sub0">Pick a market to see the preview.</p>}
+            {body ? <SignalFace b={{ ...body, entry_low: body.entry_low || "…", entry_high: body.entry_high || "…", sl: body.sl || "…", tps: body.tps.length ? body.tps : ["…"] }} validUntil={now + validMin * 60_000} /> : <p className="sub0">Choose a market in the form (type a ticker or paste a token address, then click a result) to see the preview.</p>}
           </div>
         </div>
 
