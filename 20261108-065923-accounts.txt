@@ -1,0 +1,8 @@
+=== accounts  commit b01190160b6857c6b50b74cc6c50eedd8ba7816e  Sun Nov  8 06:59:23 UTC 2026
+[06:59:26] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[06:59:31] m1.to69.testnet exists
+[06:59:32] m2.to69.testnet exists
+[06:59:33] to69.testnet: Native account balance           3.44022491896042570740742 NEAR 
+[06:59:34] app.to69.testnet: Native account balance                 4.689281987028788699999988 NEAR 
+[06:59:34] m1.to69.testnet: Native account balance           0.296060756349106892592592 NEAR 
+[06:59:35] m2.to69.testnet: Native account balance           0.2968716906081386 NEAR 

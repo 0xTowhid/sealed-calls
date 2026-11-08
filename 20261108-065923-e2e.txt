@@ -1,0 +1,11 @@
+=== e2e  commit b01190160b6857c6b50b74cc6c50eedd8ba7816e  Sun Nov  8 06:59:35 UTC 2026
+[06:59:38] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[07:00:13] wasm sha256 587d10cb844f21daf612827103bbb25c73eac85e1008d6b52a1def2ccef8c854
+[07:00:13] 0. throwaway contract e2e080659.to69.testnet with a 20-minute period (3.95 NEAR for storage; to69.testnet has Native account balance           3.44022491896042570740742 NEAR )
+Error: 
+   0: [91mError: Account <to69.testnet> does not have enough balance (3.44022491896042570740742 NEAR) to cover TX cost (3.95760744245625 NEAR).[0m
+Error: 
+ERROR: view get_config failed: {"name":"HANDLER_ERROR","cause":{"info":{"block_hash":"Bor5VDCgoh4KNjzdXCsNXFFY9J4iMuNjCK7sVNYLbVWv","block_height":276742405,"requested_account_id":"e2e080659.to69.testnet"},"name":"UNKNOWN_ACCOUNT"},"code":-32000,"message":"Server error","data":"account e2e080659.to69.testnet does not exist while 
+[07:00:21] FAIL deploy
