@@ -73,7 +73,7 @@ fn setup() -> SealedCalls {
     ctx("owner.testnet", T0_MS, 0);
     let mut c = SealedCalls::new(config());
     ctx("alice.testnet", T0_MS, near(1));
-    c.create_channel("Alice Alpha".into(), "ETH and majors".into(), plans(), 25);
+    c.create_channel("Alice Alpha".into(), "ETH and majors".into(), plans(), 25, None);
     ctx("m1.testnet", T0_MS + 1000, near(3));
     c.subscribe(0, 0);
     c.register_key(0, PK_A.into());
@@ -174,7 +174,7 @@ fn channel_cap_counts_active_subscribers() {
     ctx("owner.testnet", T0_MS, 0);
     let mut c = SealedCalls::new(config());
     ctx("alice.testnet", T0_MS, near(1));
-    c.create_channel("Tiny".into(), "".into(), plans(), 1);
+    c.create_channel("Tiny".into(), "".into(), plans(), 1, None);
     ctx("m1.testnet", T0_MS, near(3));
     c.subscribe(0, 0);
     ctx("m2.testnet", T0_MS, near(3));
@@ -186,7 +186,7 @@ fn expired_seat_frees_up() {
     ctx("owner.testnet", T0_MS, 0);
     let mut c = SealedCalls::new(config());
     ctx("alice.testnet", T0_MS, near(1));
-    c.create_channel("Tiny".into(), "".into(), plans(), 1);
+    c.create_channel("Tiny".into(), "".into(), plans(), 1, None);
     ctx("m1.testnet", T0_MS, near(3));
     c.subscribe(0, 0);
     ctx("m2.testnet", T0_MS + WEEK_MS + 1, near(3));
@@ -604,4 +604,34 @@ fn failed_scoring_changes_nothing() {
     assert_eq!(c.on_signal_scores(vec![a], Ok(None)), 0);
     assert!(c.get_signal(a).unwrap().r_bps.is_none());
     assert!(logs_have("scoring_failed"));
+}
+
+#[test]
+fn channel_tags_declared_by_creator() {
+    let mut c = setup();
+    assert_eq!(c.channel_tags(vec![0]), vec![Vec::<String>::new()]); // default: all kinds
+    ctx("alice.testnet", T0_MS + 5000, near(1));
+    let id = c.create_channel("Alice Memes".into(), "".into(), plans(), 10, Some(vec!["micro".into(), "dex".into(), "dex".into()]));
+    assert_eq!(c.channel_tags(vec![0, id]), vec![vec![], vec!["micro".to_string(), "dex".to_string()]]);
+    // None keeps tags; all three = all kinds
+    c.update_channel(id, "Alice Memes".into(), "".into(), plans(), 10, None);
+    assert_eq!(c.channel_tags(vec![id])[0].len(), 2);
+    c.update_channel(id, "Alice Memes".into(), "".into(), plans(), 10, Some(vec!["perps".into(), "dex".into(), "micro".into()]));
+    assert!(c.channel_tags(vec![id])[0].is_empty());
+}
+
+#[test]
+#[should_panic(expected = "tags: perps, dex or micro")]
+fn channel_tags_reject_unknown() {
+    let mut c = setup();
+    ctx("alice.testnet", T0_MS + 5000, near(1));
+    c.create_channel("X".into(), "".into(), plans(), 10, Some(vec!["nft".into()]));
+}
+
+#[test]
+#[should_panic(expected = "only the creator")]
+fn channel_tags_creator_only() {
+    let mut c = setup();
+    ctx("m1.testnet", T0_MS + 5000, near(1));
+    c.update_channel(0, "Hack".into(), "".into(), plans(), 10, Some(vec!["perps".into()]));
 }

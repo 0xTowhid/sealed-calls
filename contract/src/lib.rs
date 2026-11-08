@@ -351,8 +351,9 @@ impl SealedCalls {
 
     /// Anyone can create a channel. Attach about 0.05 NEAR for storage; the rest is refunded.
     #[payable]
-    pub fn create_channel(&mut self, name: String, about: String, plans: Vec<Plan>, max_members: u32) -> u32 {
+    pub fn create_channel(&mut self, name: String, about: String, plans: Vec<Plan>, max_members: u32, tags: Option<Vec<String>>) -> u32 {
         validate_channel(&name, &about, &plans, max_members, self.config.period_minutes);
+        let tags = tags.map(clean_tags);
         let start = env::storage_usage();
         let creator = env::predecessor_account_id();
         let id = self.channels.len();
@@ -371,6 +372,7 @@ impl SealedCalls {
             stats: Stats::default(),
         });
         self.channels.flush();
+        if let Some(t) = tags { write_tags(id, &t) }
         refund_rest(&creator, charge_storage(start, env::attached_deposit()));
         emit("channel_created", json!({ "channel": id, "creator": creator }));
         id
@@ -378,8 +380,9 @@ impl SealedCalls {
 
     /// The creator edits the channel. New prices apply to new subscriptions only.
     #[payable]
-    pub fn update_channel(&mut self, channel: u32, name: String, about: String, plans: Vec<Plan>, max_members: u32) {
+    pub fn update_channel(&mut self, channel: u32, name: String, about: String, plans: Vec<Plan>, max_members: u32, tags: Option<Vec<String>>) {
         validate_channel(&name, &about, &plans, max_members, self.config.period_minutes);
+        let tags = tags.map(clean_tags);
         let start = env::storage_usage();
         let me = env::predecessor_account_id();
         let c = self.channels.get_mut(channel).expect("no such channel");
@@ -389,6 +392,7 @@ impl SealedCalls {
         c.plans = plans;
         c.max_members = max_members;
         self.channels.flush();
+        if let Some(t) = tags { write_tags(channel, &t) }
         refund_rest(&me, charge_storage_or_free(start, env::attached_deposit()));
         emit("channel_updated", json!({ "channel": channel }));
     }
@@ -785,6 +789,13 @@ impl SealedCalls {
 
     pub fn get_config(&self) -> Config {
         self.config.clone()
+    }
+
+    /// What each channel says it posts: any of "perps", "dex", "micro"; empty = all kinds.
+    /// Declared by the creator; the public record shows what was actually posted.
+    pub fn channel_tags(&self, channels: Vec<u32>) -> Vec<Vec<String>> {
+        assert!(channels.len() <= 200, "at most 200 channels");
+        channels.into_iter().map(read_tags).collect()
     }
 
     pub fn get_channel(&self, channel: u32) -> Option<Channel> {
@@ -1210,3 +1221,32 @@ fn emit(event: &str, data: serde_json::Value) {
 
 #[cfg(test)]
 mod tests;
+
+// Channel kinds live under their own storage keys so the Channel struct (and state) is unchanged.
+const TAGS: [&str; 3] = ["perps", "dex", "micro"];
+
+fn tag_key(channel: u32) -> Vec<u8> {
+    [b"tags:".as_slice(), &channel.to_le_bytes()].concat()
+}
+
+fn clean_tags(tags: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for t in tags {
+        assert!(TAGS.contains(&t.as_str()), "tags: perps, dex or micro");
+        if !out.contains(&t) { out.push(t) }
+    }
+    if out.len() == TAGS.len() { out.clear() } // all three = all kinds
+    out
+}
+
+fn write_tags(channel: u32, tags: &[String]) {
+    if tags.is_empty() {
+        env::storage_remove(&tag_key(channel));
+    } else {
+        env::storage_write(&tag_key(channel), &serde_json::to_vec(tags).unwrap());
+    }
+}
+
+fn read_tags(channel: u32) -> Vec<String> {
+    env::storage_read(&tag_key(channel)).and_then(|v| serde_json::from_slice(&v).ok()).unwrap_or_default()
+}

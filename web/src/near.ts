@@ -30,6 +30,9 @@ export async function view<T>(method: string, args: object = {}): Promise<T> {
 
 export const getConfig = () => view<Config>("get_config");
 export const listChannels = () => view<Channel[]>("list_channels", { limit: 100 });
+/** Declared kinds per channel ("perps" | "dex" | "micro"); empty = all kinds. Older contract → all empty. */
+export const channelTags = (channels: number[]) =>
+  channels.length ? view<string[][]>("channel_tags", { channels }).catch(() => channels.map(() => [] as string[])) : Promise.resolve([] as string[][]);
 export const getChannel = (channel: number) => view<Channel | null>("get_channel", { channel });
 export const getMember = (channel: number, account: string) => view<Member | null>("get_member", { channel, account });
 export const subscribers = (channel: number) => view<[string, number, boolean][]>("subscribers", { channel });
