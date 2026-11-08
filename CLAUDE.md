@@ -97,7 +97,9 @@ Base/ETH/BSC/Hyperliquid/Robinhood; caller-chosen pools; TP/SL; shorts; public r
 - Web token search/prices via DexScreener (GeckoTerminal only for candles, paced + cached) after GT rate-limited the browser.
 - Robinhood Chain supported (GT network `robinhood`), USDG counts as a major quote (app + scorer, Nov 8).
 - to69.testnet balance ~3.5 NEAR (Nov 8 06:30 UTC); each settle/score costs ~0.003 NEAR + gas.
-- Next (user, Nov 8): post real signals daily; test late access with a second wallet. Me: test Reveal/Settle/Claim buttons live, lock contract Nov 13, video script, X post, submission.
+- **Late access verified live by the user (Nov 8 15:20 Dhaka)** with a second wallet.
+- Layout pass Nov 8: Explore short list (option B, approved) ≤1180px, channel page single column ≤1320px, signal cards ≤880px; checked 360–1920px with mocked RPC (scratchpad harness), no overflow/clipped tables.
+- Next (user, Nov 8): post real signals daily. Me: test Reveal/Settle/Claim buttons live, lock contract Nov 13, video script, X post, submission.
 - testnet.sh actions: accounts, wipe-app, delete=<acct>, deploy, e2e, settle (CH=n), status. Small calls use 100 Tgas (members hold ~0.5 NEAR).
 
 ## Gate results (Nov 7)
