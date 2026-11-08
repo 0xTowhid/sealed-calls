@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getMember, getPeriod, periodHeld, subscribers } from "../near";
-import { record, useLoad, useNow } from "../data";
-import { day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
+import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getMember, getPeriod, listChannels, periodHeld, subscribers } from "../near";
+import { creatorRecord, record, useLoad, useNow } from "../data";
+import { channelPath, day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
 import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
 import { Act, Countdown, LiveCells, LiveLine, McapAtCall, MicroTag, Outcome, Result, SideTag, rangeState } from "../ui";
 import { priceOf, venueLabel } from "../markets";
@@ -37,7 +37,11 @@ async function load(id: number, account: string | null) {
       if (len > 0n) heldAhead += (BigInt(sb.held) * over) / len;
     }
   }
-  return { ch, cfg, signals, subs: subs.length, readers: subs.filter((x) => x[2]).map((x) => x[0]), cur, member, claim, periods, heldAhead };
+  const channels = await listChannels();
+  const whole = channels.filter((c) => c.creator === ch.creator).length > 1
+    ? await creatorRecord(ch.creator, channels, (c) => (c.id === id ? Promise.resolve(signals) : allSignals(c.id, c.signal_count)))
+    : null;
+  return { ch, cfg, signals, subs: subs.length, readers: subs.filter((x) => x[2]).map((x) => x[0]), cur, member, claim, periods, heldAhead, channels, whole };
 }
 
 export function ChannelPage({ id, account }: { id: number; account: string | null }) {
@@ -46,7 +50,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
   const [plan, setPlan] = useState<number | null>(null);
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading the channel from NEAR testnet…</p>;
-  const { ch, cfg, signals, subs, readers, cur, member, claim, periods, heldAhead } = data;
+  const { ch, cfg, signals, subs, readers, cur, member, claim, periods, heldAhead, channels, whole } = data;
   const rec = record(ch, signals);
   const word = periodWord(cfg.period_minutes);
   const periodMs = cfg.period_minutes * 60_000;
@@ -76,12 +80,32 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
           <div className="owner-head">
             <div>
               <div className="sub0 small">{ch.creator} · creator since {day(ch.created_at_ms)}{isCreator && <> · <span className="only">YOUR CHANNEL</span></>}</div>
-              <h1 className="display m">{ch.name}</h1>
+              <h1 className="display m">{ch.name}{whole && rec.scored === 0 && <> <span className="newch">NEW CHANNEL</span></>}</h1>
               {ch.about && <p className="lede">{ch.about}</p>}
             </div>
             {isCreator && <a className="btn" href="#/desk">+ New signal</a>}
           </div>
-          {isCreator && <ShareRow ch={ch} />}
+          {isCreator && <ShareRow ch={ch} path={channelPath(ch, channels)} />}
+          {whole && (
+            <div className="whole">
+              <b>{isCreator ? "Your" : "This creator's"} full record, across {whole.per.length} channels</b>
+              <div className="row">
+                <div><b>{whole.rec.signals}</b><span>signals</span></div>
+                <div><b className={(whole.rec.score_bps ?? 0) > 0 ? "gain" : (whole.rec.score_bps ?? 0) < 0 ? "loss" : ""}>{pct(whole.rec.score_bps)}</b><span>score</span></div>
+                <div><b>{whole.rec.periodsSettled ? `${whole.rec.periodsEarned} of ${whole.rec.periodsSettled}` : "—"}</b><span>{word}s earned</span></div>
+                <div><b>{whole.per.length}</b><span>channels</span></div>
+              </div>
+              <table className="wk" style={{ marginTop: 10 }}>
+                <thead><tr><th>Channel</th><th className="n">Signals</th><th className="n">Score</th><th className="n">{word[0].toUpperCase() + word.slice(1)}s earned</th></tr></thead>
+                <tbody>
+                  {whole.per.map((p) => (
+                    <tr key={p.ch.id}><td><a href={channelPath(p.ch, channels)}><b>{p.ch.name}</b></a>{p.ch.id === ch.id ? " (this one)" : ""}</td><td className="n">{p.rec.signals}</td><td className={`n ${(p.rec.score_bps ?? 0) > 0 ? "gain" : (p.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(p.rec.score_bps)}</td><td className="n">{p.rec.periodsSettled ? `${p.rec.periodsEarned} of ${p.rec.periodsSettled}` : "—"}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="small" style={{ marginTop: 8 }}>A new channel never hides an old record.</div>
+            </div>
+          )}
           {isCreator && (
             <div className="money">
               <div><b>{nearNum(ch.stats.earned).toLocaleString(undefined, { maximumFractionDigits: 3 })}</b><span>NEAR paid to you</span></div>
@@ -227,9 +251,9 @@ function PeriodRow({ p, r, held, n, start, periodMs, cur, next }: { p: number; r
 
 const appUrl = () => window.location.href.split("#")[0].split("?")[0];
 
-function ShareRow({ ch }: { ch: Channel }) {
+function ShareRow({ ch, path }: { ch: Channel; path: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `${appUrl()}#/@${ch.creator}`;
+  const url = `${appUrl()}${path}`;
   const text = `My trading signals are sealed on @NEARProtocol: subscribers see them first, everyone sees the scored result after. Nothing can be deleted. ${url}`;
   return (
     <div className="share">

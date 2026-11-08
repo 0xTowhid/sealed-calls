@@ -11,22 +11,56 @@ import type { Channel, Signal, SignalBody } from "../types";
 import { MICRO_FLOOR_USD } from "../types";
 import { isSealed, opensAt } from "../types";
 
-async function load(account: string) {
-  const [cfg, channels] = await Promise.all([getConfig(), listChannels()]);
-  const mine = channels.find((c) => c.creator === account) ?? null;
-  if (!mine) return { cfg, mine, subs: [] as [string, number, boolean][], held: "0" };
-  const [subs, cur] = await Promise.all([subscribers(mine.id), currentPeriod(mine.id)]);
-  const held = await periodHeld(mine.id, cur);
-  return { cfg, mine, subs, held };
+const pickKey = (account: string) => `sc2:desk-channel:${account}`;
+function savedPick(account: string): number | null {
+  try { const v = localStorage.getItem(pickKey(account)); return v == null ? null : Number(v); } catch { return null; }
 }
 
-export function Desk({ account }: { account: string | null }) {
-  const { data, error, reload } = useLoad(() => (account ? load(account) : Promise.resolve(null)), [account], 30_000, `desk:${account}`);
+async function load(account: string, want: number | null) {
+  const [cfg, channels] = await Promise.all([getConfig(), listChannels()]);
+  const all = channels.filter((c) => c.creator === account);
+  const mine = all.find((c) => c.id === want) ?? all[all.length - 1] ?? null;
+  if (!mine) return { cfg, all, mine, subs: [] as [string, number, boolean][], held: "0" };
+  const [subs, cur] = await Promise.all([subscribers(mine.id), currentPeriod(mine.id)]);
+  const held = await periodHeld(mine.id, cur);
+  return { cfg, all, mine, subs, held };
+}
+
+export function Desk({ account, newChannel }: { account: string | null; newChannel?: boolean }) {
+  const [pick, setPick] = useState<number | null>(() => (account ? savedPick(account) : null));
+  useEffect(() => { if (account) setPick(savedPick(account)); }, [account]);
+  const { data, error, reload } = useLoad(() => (account ? load(account, pick) : Promise.resolve(null)), [account, pick], 30_000, `desk:${account}:${pick}`);
   if (!account) return <section className="sheet"><h2>Creator desk</h2><p className="sub">Connect a wallet to start a channel or post signals.</p></section>;
   if (error) return <div className="notice err">{error}</div>;
-  if (!data) return <p className="empty">Reading your channel…</p>;
-  if (!data.mine) return <CreateChannel onDone={reload} word={periodWord(data.cfg.period_minutes)} />;
-  return <Compose ch={data.mine} account={account} subs={data.subs} held={data.held} periodMinutes={data.cfg.period_minutes} floorUsd={data.cfg.liquidity_floor_usd} />;
+  if (!data) return <p className="empty">Reading your channels…</p>;
+  if (!data.mine || newChannel) {
+    return <CreateChannel word={periodWord(data.cfg.period_minutes)} first={!data.mine}
+      onDone={async () => {
+        const after = (await listChannels()).filter((c) => c.creator === account);
+        const made = after[after.length - 1];
+        if (made) { try { localStorage.setItem(pickKey(account), String(made.id)); } catch { /* ignore */ } setPick(made.id); }
+        window.location.hash = "#/desk";
+        reload();
+      }} />;
+  }
+  const choose = (v: string) => {
+    if (v === "new") { window.location.hash = "#/desk/new"; return; }
+    try { localStorage.setItem(pickKey(account), v); } catch { /* ignore */ }
+    setPick(Number(v));
+  };
+  return (
+    <>
+      <div className="picker-bar">
+        <label htmlFor="pick">Posting to</label>
+        <select id="pick" value={data.mine.id} onChange={(e) => choose(e.target.value)}>
+          {data.all.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="new">+ New channel…</option>
+        </select>
+        <span className="sub0 small">Each channel has its own prices, record and payouts. Your combined record across all of them is shown on every channel.</span>
+      </div>
+      <Compose key={data.mine.id} ch={data.mine} account={account} subs={data.subs} held={data.held} periodMinutes={data.cfg.period_minutes} floorUsd={data.cfg.liquidity_floor_usd} />
+    </>
+  );
 }
 
 // ------------------------------------------------------------------ create a channel
@@ -39,7 +73,7 @@ const DEFAULT_PLANS = [
   { days: 365, price: "50" },
 ];
 
-function CreateChannel({ onDone, word }: { onDone: () => void; word: string }) {
+function CreateChannel({ onDone, word, first }: { onDone: () => void; word: string; first: boolean }) {
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const [max, setMax] = useState("100");
@@ -48,7 +82,8 @@ function CreateChannel({ onDone, word }: { onDone: () => void; word: string }) {
   return (
     <div className="g-desk">
       <section className="sheet">
-        <h2>Start your channel</h2>
+        <h2>{first ? "Start your channel" : "New channel"}</h2>
+        {!first && <p className="notice">Your record from your other channels stays public and is shown on this one too. A new channel is for a different kind of signal, not a fresh start.</p>}
         <p className="sub">Anyone can be a creator. Subscribers pay you: half arrives at once, the other half each {word} your signals make money.</p>
         <label htmlFor="cn">Channel name</label>
         <input id="cn" type="text" value={name} maxLength={48} onChange={(e) => setName(e.target.value)} placeholder="e.g. 0xTowhid Calls" />

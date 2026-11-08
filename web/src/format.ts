@@ -72,3 +72,11 @@ export const outcomeKind = (s: Signal): "w" | "l" | "n" | "s" =>
 
 /** Costs in basis points -> "0.09%", "1.2%". */
 export const costPct = (bps: number) => `${(bps / 100).toFixed(bps < 100 ? 2 : 1)}%`;
+
+/** URL name of a channel: "Kopi Perps" -> "kopi-perps". */
+export const slug = (name: string) => name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "channel";
+/** Channel URL: /#/@creator/slug (the id when two channels of a creator share a name). */
+export const channelPath = (ch: { id: number; creator: string; name: string }, all: { id: number; creator: string; name: string }[]) => {
+  const same = all.filter((c) => c.creator === ch.creator && slug(c.name) === slug(ch.name));
+  return `#/@${ch.creator}/${same.length > 1 ? ch.id : slug(ch.name)}`;
+};

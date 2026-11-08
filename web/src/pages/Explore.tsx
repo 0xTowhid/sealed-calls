@@ -25,13 +25,24 @@ export function Explore() {
   const [filter, setFilter] = useState<"all" | "perp" | "dex" | "micro">("all");
   const word = data ? periodWord(data.cfg.period_minutes) : "week";
   const venueOf = { perp: "hyperliquid", dex: "gecko", micro: "gecko_micro" } as const;
-  const rows = (data?.rows ?? []).filter(
-    (r) => filter === "all" || r.signals.some((s) => s.body && s.body.market.venue === venueOf[filter]),
-  );
-  // Micro-caps are ranked only on their micro-cap signals.
-  const microRows = filter !== "micro" ? [] : rows
-    .map((r) => { const sigs = r.signals.filter((s) => s.body?.market.venue === "gecko_micro"); return { ...r, sigs, rec: record(r.ch, sigs) }; })
+  // Ranked by creator (account), on all their channels together: a new channel can't wash a record.
+  const groups = new Map<string, Row[]>();
+  for (const r of data?.rows ?? []) groups.set(r.ch.creator, [...(groups.get(r.ch.creator) ?? []), r]);
+  const creators = [...groups.entries()]
+    .map(([creator, chans]) => {
+      const all = chans.flatMap((c) => c.signals);
+      const sigs = filter === "all" ? all : all.filter((s) => s.body?.market.venue === venueOf[filter]);
+      const rec = record(chans[0].ch, sigs);
+      const earned = chans.reduce((a, c) => a + c.ch.stats.periods_released, 0);
+      const settled = chans.reduce((a, c) => a + c.ch.stats.periods_released + c.ch.stats.periods_refunded, 0);
+      const plans = chans.flatMap((c) => c.ch.plans);
+      const cheapest = [...plans].sort((a, b) => (BigInt(a.price) < BigInt(b.price) ? -1 : 1))[0];
+      return { creator, chans, sigs, rec, earned, settled, cheapest, subs: chans.reduce((a, c) => a + c.subs, 0) };
+    })
+    .filter((g) => filter === "all" || g.sigs.length > 0)
     .sort((a, b) => (b.rec.score_bps ?? -1e9) - (a.rec.score_bps ?? -1e9) || b.rec.scored - a.rec.scored);
+  const rows = creators;
+  const microRows = filter === "micro" ? creators : [];
 
   return (
     <>
@@ -61,7 +72,7 @@ export function Explore() {
       <section className="sheet">
         <div className="row-between">
           <h2>Creators</h2>
-          <span className="sub0 small">Ranked by score: total result ÷ (signals + 5)</span>
+          <span className="sub0 small">Creators ranked on all their channels together. Score: total result ÷ (signals + 5)</span>
         </div>
         <div className="chips" role="group" aria-label="Filter">
           {(["all", "perp", "dex", "micro"] as const).map((f) => (
@@ -79,9 +90,9 @@ export function Explore() {
               <thead><tr><th /><th>Creator</th><th>Micro-cap signals, oldest → newest</th><th className="n">Micro-cap signals</th><th className="n">Win rate</th><th className="n">Micro-cap score</th><th className="n">Avg mcap at call</th></tr></thead>
               <tbody>
                 {microRows.map((r, i) => (
-                  <tr key={r.ch.id} onClick={() => (window.location.hash = `#/c/${r.ch.id}`)} className="click">
+                  <tr key={r.creator} onClick={() => (window.location.hash = `#/@${r.creator}`)} className="click">
                     <td className="rank">{i + 1}</td>
-                    <td><a href={`#/c/${r.ch.id}`} className="cname">{r.ch.name}</a><div className="sub0 small">{r.ch.creator}</div></td>
+                    <td><a href={`#/@${r.creator}`} className="cname">{r.creator}</a><div className="sub0 small">{r.chans.map((c) => c.ch.name).join(" · ")}</div></td>
                     <td><Ticks signals={r.sigs} /></td>
                     <td className="n">{r.sigs.length}</td>
                     <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
@@ -99,25 +110,23 @@ export function Explore() {
           <div className="scroll">
             <table className="creators">
               <thead>
-                <tr><th /><th>Creator</th><th>Every signal, oldest → newest</th><th className="n">Signals</th><th className="n">Win rate</th><th className="n">Score</th><th className="n">{word[0].toUpperCase() + word.slice(1)}s earned</th><th className="n">Subscribers</th><th className="n">From</th></tr>
+                <tr><th /><th>Creator</th><th>Every signal, oldest → newest</th><th className="n">Channels</th><th className="n">Signals</th><th className="n">Win rate</th><th className="n">Score</th><th className="n">{word[0].toUpperCase() + word.slice(1)}s earned</th><th className="n">Subscribers</th><th className="n">From</th></tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => {
-                  const cheapest = [...r.ch.plans].sort((a, b) => (BigInt(a.price) < BigInt(b.price) ? -1 : 1))[0];
-                  return (
-                    <tr key={r.ch.id} onClick={() => (window.location.hash = `#/c/${r.ch.id}`)} className="click">
-                      <td className="rank">{i + 1}</td>
-                      <td><a href={`#/c/${r.ch.id}`} className="cname">{r.ch.name}</a><div className="sub0 small">{r.ch.creator}{r.ch.about ? ` · ${r.ch.about.length > 64 ? r.ch.about.slice(0, 62).replace(/\s+\S*$/, "") + "…" : r.ch.about}` : ""}</div></td>
-                      <td><Ticks signals={r.signals} /></td>
-                      <td className="n">{r.rec.signals}</td>
-                      <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
-                      <td className={`n score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</td>
-                      <td className="n">{r.rec.periodsSettled ? `${r.rec.periodsEarned} of ${r.rec.periodsSettled}` : "—"}</td>
-                      <td className="n">{r.subs} / {r.ch.max_members}</td>
-                      <td className="n">{cheapest ? <><b>{near(cheapest.price)}</b><div className="sub0 small">{planName(cheapest.days)}</div></> : "—"}</td>
-                    </tr>
-                  );
-                })}
+                {rows.map((r, i) => (
+                  <tr key={r.creator} onClick={() => (window.location.hash = `#/@${r.creator}`)} className="click">
+                    <td className="rank">{i + 1}</td>
+                    <td><a href={`#/@${r.creator}`} className="cname">{r.chans.length === 1 ? r.chans[0].ch.name : r.creator}</a><div className="sub0 small">{r.chans.length === 1 ? r.creator : r.chans.map((c) => c.ch.name).join(" · ")}</div></td>
+                    <td><Ticks signals={r.sigs} /></td>
+                    <td className="n">{r.chans.length}</td>
+                    <td className="n">{r.rec.signals}</td>
+                    <td className="n">{r.rec.winRate == null ? "—" : `${r.rec.winRate}%`}</td>
+                    <td className={`n score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</td>
+                    <td className="n">{r.settled ? `${r.earned} of ${r.settled}` : "—"}</td>
+                    <td className="n">{r.subs}</td>
+                    <td className="n">{r.cheapest ? <><b>{near(r.cheapest.price)}</b><div className="sub0 small">{planName(r.cheapest.days)}</div></> : "—"}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

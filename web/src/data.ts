@@ -82,3 +82,14 @@ export function record(ch: Channel, signals: Signal[]) {
     periodsSettled: ch.stats.periods_released + ch.stats.periods_refunded,
   };
 }
+
+/** Every channel of a creator with its signals, and their combined record (what follows the creator). */
+export async function creatorRecord(creator: string, channels: Channel[], loadSignals: (ch: Channel) => Promise<Signal[]>) {
+  const mine = channels.filter((c) => c.creator === creator);
+  const per = await Promise.all(mine.map(async (ch) => { const s = await loadSignals(ch); return { ch, signals: s, rec: record(ch, s) }; }));
+  const all = per.flatMap((p) => p.signals);
+  const earned = mine.reduce((a, c) => a + c.stats.periods_released, 0);
+  const settled = mine.reduce((a, c) => a + c.stats.periods_released + c.stats.periods_refunded, 0);
+  const rec = { ...record(mine[0], all), periodsEarned: earned, periodsSettled: settled };
+  return { per, all, rec, since: Math.min(...mine.map((c) => c.created_at_ms)) };
+}
