@@ -1,0 +1,7 @@
+=== floor=100000  commit 6e524c55e5da086035bce2d8a62c94922b532be1  Sun Nov  8 07:07:23 UTC 2026
+[07:07:26] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+    │    Transaction ID: DZSjvRJViGjvAeVUt3rP2YZKvPwewpYi1AfWjRXf29xX
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"config_changed","data":[{"scorer_wasm_hash":"0ecece80a9290026ce5c2755e8c2961631c937cf35771e26811c30818d1e5a78"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[07:07:33] liquidity floor now: 100000
