@@ -262,3 +262,4 @@ table.record th { padding: 8px 6px; }
 .card.mini .levels { grid-template-columns: 1fr 1fr; }
 .card.mini .levels div:nth-child(odd) { border-left: 0; padding-left: 0; }
 .notice.spot { margin: 16px 0 0; background: #fff; }
+.liveline { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--rule); font-size: 14px; }

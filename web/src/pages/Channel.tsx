@@ -3,7 +3,7 @@ import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getM
 import { record, useLoad, useNow } from "../data";
 import { day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
 import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
-import { Act, Countdown, Outcome, Result, SideTag, rangeState } from "../ui";
+import { Act, Countdown, LiveCells, LiveLine, Outcome, Result, SideTag, rangeState } from "../ui";
 import { priceOf, venueLabel } from "../markets";
 import { GAS_300, NEAR } from "../config";
 import type { Channel, PeriodResult, Signal } from "../types";
@@ -122,6 +122,10 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                         <td>{b ? b.tps.map(price).join(" · ") : "—"}</td>
                         <td>{b ? price(b.sl) : "—"}</td>
                         <td>{dur(s.valid_min)}</td>
+                        {b && s.r_bps == null && !isSealed(s) ? (
+                          <LiveCells b={b} postedMs={s.posted_at_ms} validMin={s.valid_min} />
+                        ) : (
+                          <>
                         <td>
                           {due ? (
                             drandReady ? <Act className="btn small" label="Reveal now" busyLabel="Opening…" run={() => reveal(s)} /> : <span className="out s">opening…</span>
@@ -130,6 +134,8 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                           )}
                         </td>
                         <td className="n"><Result s={s} /></td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -137,7 +143,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               </table>
             </div>
           )}
-          <p className="fine">Results include fees and leverage. Fills, TPs and SL use candle closes; liquidation uses wicks. Anyone can reveal a signal once it ends.</p>
+          <p className="fine">Results include fees and leverage. Fills, TPs and SL use candle closes; liquidation uses wicks. Anyone can reveal a signal once it ends. “(est.)” rows are replayed in your browser on the same candles; OutLayer writes the official result when the day settles.</p>
         </section>
       </div>
 
@@ -277,6 +283,7 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
                     <div><span>SL</span><b>{price(b.sl)}</b></div>
                     <div><span>Now</span><b>{prices[s.id] != null ? price(String(Number(prices[s.id]!.toPrecision(6)))) : "—"}</b></div>
                   </div>
+                  <LiveLine b={b} postedMs={s.posted_at_ms} validMin={s.valid_min} />
                   <div className="small" style={{ marginTop: 10 }}>
                     <span className={have >= readers.length ? "gain" : "loss"}><b>{have >= readers.length ? "✓ " : ""}{have} of {readers.length} subscribers</b></span> have it
                     {prices[s.id] != null && <> · {rangeState(b, prices[s.id]!)}</>}

@@ -4,7 +4,7 @@ import { useLoad, useNow } from "../data";
 import { costPct, near, price, sig, when } from "../format";
 import { loadMemberKey, memberOpen, newMemberKey, type Opened } from "../crypto";
 import { priceOf } from "../markets";
-import { Act, Countdown, MarketLinks, Outcome, Result, SignalFace, rangeState } from "../ui";
+import { Act, Countdown, LiveLine, MarketLinks, Outcome, Result, SignalFace, rangeState } from "../ui";
 import type { Channel, Member, Signal } from "../types";
 import { isSealed, opensAt } from "../types";
 
@@ -123,6 +123,7 @@ function FeedCard({ s, name, now, account, opened, live }: { s: Signal; name: st
           {body ? (
             <>
               <SignalFace b={body} validUntil={opensAt(s)} />
+              <LiveLine b={body} postedMs={s.posted_at_ms} validMin={s.valid_min} />
               <div className="live">
                 {live != null && <span>Now <b>{price(sig(live))}</b>, {rangeState(body, live)}</span>}
                 {typeof opened !== "string" && opened?.matches && <span className="verified">✓ Same signal that's locked on-chain</span>}
@@ -146,6 +147,7 @@ function FeedCard({ s, name, now, account, opened, live }: { s: Signal; name: st
       <div className="bd ended">
         <div>
           {body ? <SignalFace b={body} size="m" /> : <p className="big">{s.outcome === "unrevealed" ? "Never opened" : "Invalid signal"}</p>}
+          {body && s.r_bps == null && <LiveLine b={body} postedMs={s.posted_at_ms} validMin={s.valid_min} />}
           {s.fill_price && <div className="sub0 small">Filled {price(s.fill_price)}{s.exit_price ? ` → exit ${price(s.exit_price)}` : ""}{s.cost_bps != null ? ` · costs ${costPct(s.cost_bps)}` : ""}</div>}
         </div>
         <div className="r-col"><Outcome s={s} /><Result s={s} big /></div>

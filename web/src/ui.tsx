@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { countdown, dur, outcomeKind, outcomeText, pct, price, when } from "./format";
+import { countdown, dur, outcomeKind, outcomeText, pct, price, sig, when } from "./format";
 import { chartUrl, venueLabel } from "./markets";
 import type { Signal, SignalBody } from "./types";
 import { isSealed, opensAt } from "./types";
@@ -115,6 +115,60 @@ export function Act({ label, busyLabel, run, className = "btn", disabled }: { la
         {busy ? busyLabel ?? "Working…" : label}
       </button>
       {err && <div className="hint bad" role="alert">{err}</div>}
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ live (unofficial) replay
+
+import { useEffect as useEffectLive, useState as useStateLive } from "react";
+import { replay, type Live } from "./score";
+
+export function useLive(b: SignalBody | null, postedMs: number, validMin: number, enabled = true) {
+  const [live, setLive] = useStateLive<Live | null>(null);
+  useEffectLive(() => {
+    if (!b || !enabled) return;
+    let stop = false;
+    const run = () => replay(b, postedMs, validMin).then((l) => !stop && setLive(l)).catch(() => {});
+    run();
+    const ended = Date.now() >= postedMs + validMin * 60_000;
+    const t = ended ? undefined : setInterval(run, 60_000);
+    return () => { stop = true; if (t) clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b ? JSON.stringify(b) : "", postedMs, validMin, enabled]);
+  return live;
+}
+
+const signed = (r: number) => `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r * 100).toFixed(1)}%`;
+
+/** One line: where the signal stands now, replayed on public candles. */
+export function LiveLine({ b, postedMs, validMin }: { b: SignalBody; postedMs: number; validMin: number }) {
+  const l = useLive(b, postedMs, validMin);
+  if (!l) return <div className="liveline sub0">Live status: checking the price history…</div>;
+  const ended = Date.now() >= postedMs + validMin * 60_000;
+  const cls = l.r == null || l.r === 0 ? "" : l.r > 0 ? "gain" : "loss";
+  return (
+    <div className="liveline">
+      <b>{ended ? "Result so far" : "Live"}:</b>{" "}
+      {l.fill == null ? (
+        <>not filled{ended ? "" : " yet"}{l.last != null && <> · price {price(sig(l.last))}</>} · <b>0%</b></>
+      ) : (
+        <>filled at {price(sig(l.fill))}{l.fillAt ? ` (${when(l.fillAt)})` : ""} → <b>{l.outcome}</b> · <b className={cls}>{signed(l.r ?? 0)}</b>{l.state === "open" && <> at {price(sig(l.last ?? l.fill))}</>}</>
+      )}
+      <span className="sub0"> · unofficial until settlement</span>
+    </div>
+  );
+}
+
+/** Compact estimate for tables: "≈ −12.4%" and the outcome. */
+export function LiveCells({ b, postedMs, validMin }: { b: SignalBody; postedMs: number; validMin: number }) {
+  const l = useLive(b, postedMs, validMin);
+  if (!l) return <><td><span className="out s">scoring…</span></td><td className="n sub0">…</td></>;
+  const r = l.fill == null ? 0 : l.r ?? 0;
+  return (
+    <>
+      <td><span className="out n" title="Replayed in your browser on the same public candles; OutLayer writes the official result at settlement.">{l.fill == null ? "not filled" : l.outcome} (est.)</span></td>
+      <td className={`n ${r > 0 ? "gain" : r < 0 ? "loss" : "sub0"}`} title="Unofficial until settlement">≈ {r === 0 ? "0%" : signed(r)}</td>
     </>
   );
 }
