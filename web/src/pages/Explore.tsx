@@ -103,8 +103,31 @@ export function Explore() {
             ? <p className="empty">No creators yet. <a href="#/desk">Open the creator desk</a> to start a channel.</p>
             : <p className="empty">No channels post {tabName} signals yet. <a href="#/desk">Start one on the creator desk</a>.</p>
         )}
+        {rows.length > 0 && (
+          <ol className="clist">
+            {rows.map((r, i) => {
+              const sealed = r.chans.reduce((a, c) => a + c.signals.filter((x) => x.status === "Sealed").length, 0);
+              const name = r.chans.length === 1 ? r.chans[0].ch.name : r.creator;
+              const meta = filter !== "all" && !r.sigs.length
+                ? "none ended yet"
+                : r.rec.scored === 0
+                  ? `new creator${sealed ? ` · ${sealed} sealed` : ""}`
+                  : `${filter === "all" ? r.rec.signals : r.sigs.length} signals · ${r.chans.length === 1 && r.cheapest ? `from ${near(r.cheapest.price)}/${planName(r.cheapest.days)}` : `${r.chans.length} channels`}`;
+              return (
+                <li key={r.creator}>
+                  <a href={`#/@${r.creator}`}>
+                    <span className="rank">{i + 1}</span>
+                    <b className="cname">{name}</b>
+                    <b className={`score ${(r.rec.score_bps ?? 0) > 0 ? "gain" : (r.rec.score_bps ?? 0) < 0 ? "loss" : ""}`}>{pct(r.rec.score_bps)}</b>
+                    <span className="meta"><Ticks signals={r.sigs} /><span>{meta}</span><span className="chev" aria-hidden>›</span></span>
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        )}
         {filter === "micro" && microRows.length > 0 && (
-          <div className="scroll">
+          <div className="scroll desk-only">
             <table className="creators">
               <thead><tr><th /><th>Creator</th><th>Micro-cap signals, oldest → newest</th><th className="n">Micro-cap signals</th><th className="n">Win rate</th><th className="n">Micro-cap score</th><th className="n">Avg mcap at call</th></tr></thead>
               <tbody>
@@ -125,7 +148,7 @@ export function Explore() {
           </div>
         )}
         {filter !== "micro" && rows.length > 0 && (
-          <div className="scroll">
+          <div className="scroll desk-only">
             <table className="creators">
               <thead>
                 <tr><th /><th>Creator</th><th>Every signal, oldest → newest</th><th className="n">Channels</th><th className="n">Signals</th><th className="n">Win rate</th><th className="n">Score</th><th className="n">{word[0].toUpperCase() + word.slice(1)}s earned</th><th className="n">Subscribers</th><th className="n">From</th></tr>
