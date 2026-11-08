@@ -1,12 +1,23 @@
-=== keep  commit 243e05c087e17322667436dbfd255465d48b5e5f  Sun Nov  8 06:30:20 UTC 2026
-[06:30:23] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[06:30:25] keeper: 1 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.48285725857495530740742 NEAR 
-[06:30:27] channel 0: scoring signals [1,0] on OutLayer
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[1,0]}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13228,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/07576ff7461b77d84299f2f036ff100ed177e6ae/scorer.wasm","hash":"caaaadc6b0e7efb
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":1,"r_bps":0,"outcome":"not_filled"},{"id":0,"r_bps":-62,"outcome":"expired"}]}]}
-    signal 1 ETH 0% not_filled
-    signal 0 XRP -0.62% expired
-[06:30:50] period 0 has not ended yet (current 0)
-[06:30:50] keeper done
+=== keep  commit 14a93380c4be271c9b99093cc4caac45d9e76349  Sun Nov  8 11:16:06 UTC 2026
+[11:16:09] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[11:16:13] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.394780969182681207407422 NEAR 
+[11:16:16] channel 0 signal 2: revealing from drand
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":2,"channel":0,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
+[11:16:20] channel 0: scoring signals [2] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[2]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13368,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":2,"r_bps":-237,"outcome":"sl"}]}]}
+    signal 2 ZEC -2.37% sl
+[11:16:46] period 0 has not ended yet (current 0)
+[11:16:49] period 0 has not ended yet (current 0)
+[11:16:50] channel 2 signal 6: revealing from drand
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":6,"channel":2,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
+[11:16:54] channel 2: scoring signals [6] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[6]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13370,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":6,"r_bps":0,"outcome":"not_filled"}]}]}
+    signal 6 coin 0% not_filled
+[11:17:22] period 0 has not ended yet (current 0)
+[11:17:22] keeper done
