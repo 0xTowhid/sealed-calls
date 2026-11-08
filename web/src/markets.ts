@@ -34,15 +34,23 @@ export function gtFetch(url: string): Promise<Response> {
 
 type DsPair = { chainId: string; pairAddress: string; baseToken: { address: string; symbol: string }; quoteToken: { address: string; symbol: string }; priceUsd?: string; liquidity?: { usd?: number }; fdv?: number; marketCap?: number };
 
-/** Best (deepest) DexScreener pair per token, paired with a major. */
+/** Best (deepest) DexScreener pair per token, paired with a major. Deeper pools paired with some
+ *  other token (e.g. a memecoin/memecoin pair) are noted in `other` so the desk can explain. */
 function dsFound(pairs: DsPair[], match: (p: DsPair) => boolean): Found[] {
   const best = new Map<string, Found>();
+  const others = new Map<string, { symbol: string; liquidity: number }>();
   for (const p of pairs) {
-    if (!match(p) || !MAJORS.has((p.quoteToken?.symbol ?? "").toUpperCase())) continue;
+    if (!match(p)) continue;
     const net = gtNet(p.chainId);
     const liq = p.liquidity?.usd ?? 0;
     const key = `${net}:${p.baseToken.address}`;
-    if ((best.get(key)?.liquidity ?? -1) >= liq) continue;
+    if (!MAJORS.has((p.quoteToken?.symbol ?? "").toUpperCase())) {
+      if ((others.get(key)?.liquidity ?? -1) < liq) others.set(key, { symbol: p.quoteToken?.symbol ?? "?", liquidity: liq });
+      if (!best.has(key)) best.set(key, { market: { venue: "gecko", network: net, address: p.baseToken.address, symbol: p.baseToken.symbol }, label: `${networkName(net)} DEX`, price: Number(p.priceUsd) || null, liquidity: 0, mcap: p.marketCap || p.fdv || null, maxLeverage: 1, noMajor: true });
+      continue;
+    }
+    const cur = best.get(key);
+    if (cur && !cur.noMajor && (cur.liquidity ?? -1) >= liq) continue;
     best.set(key, {
       market: { venue: "gecko", network: net, address: p.baseToken.address, symbol: p.baseToken.symbol },
       label: `${networkName(net)} DEX`,
@@ -52,11 +60,18 @@ function dsFound(pairs: DsPair[], match: (p: DsPair) => boolean): Found[] {
       maxLeverage: 1,
     });
   }
+  for (const [k, f] of best) { const o = others.get(k); if (o && o.liquidity > (f.liquidity ?? 0)) f.other = o; }
   return [...best.values()].sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0));
 }
 import type { Market } from "./types";
 
-export type Found = { market: Market; label: string; price: number | null; liquidity: number | null; mcap: number | null; maxLeverage: number };
+export type Found = {
+  market: Market; label: string; price: number | null; liquidity: number | null; mcap: number | null; maxLeverage: number;
+  /** Deepest pool paired with a non-major token, when it is deeper than the SOL/USDC/… pool we score on. */
+  other?: { symbol: string; liquidity: number };
+  /** No pool against SOL/USDC/ETH/… at all. */
+  noMajor?: boolean;
+};
 
 type HlMeta = { names: string[]; maxLev: Map<string, number>; mids: Record<string, string>; at: number };
 let hlCache: HlMeta | null = null;
@@ -94,19 +109,28 @@ async function tokenOnNetwork(net: string, addr: string): Promise<Found | "none"
   const inc = new Map<string, { symbol: string; address: string }>();
   for (const t of j.included ?? []) inc.set(t.id, { symbol: String(t.attributes?.symbol ?? ""), address: String(t.attributes?.address ?? "") });
   let best: Found | null = null;
+  let other: { symbol: string; liquidity: number } | null = null;
+  let sym = "";
   for (const p of j.data ?? []) {
     const b = inc.get(p.relationships?.base_token?.data?.id);
     const q = inc.get(p.relationships?.quote_token?.data?.id);
     if (!b || !q) continue;
     const mine = b.address.toLowerCase() === addr.toLowerCase() ? b : q.address.toLowerCase() === addr.toLowerCase() ? q : null;
-    const other = mine === b ? q : b;
-    if (!mine || !MAJORS.has(other.symbol.toUpperCase())) continue;
+    const otherTok = mine === b ? q : b;
+    if (!mine) continue;
+    sym = mine.symbol;
     const liq = Number(p.attributes?.reserve_in_usd) || 0;
+    if (!MAJORS.has(otherTok.symbol.toUpperCase())) {
+      if ((other?.liquidity ?? -1) < liq) other = { symbol: otherTok.symbol, liquidity: liq };
+      continue;
+    }
     if (best && (best.liquidity ?? 0) >= liq) continue;
     const priceUsd = Number(mine === b ? p.attributes?.base_token_price_usd : p.attributes?.quote_token_price_usd) || null;
     const mc = Number(p.attributes?.market_cap_usd) || Number(p.attributes?.fdv_usd) || null;
     best = { market: { venue: "gecko", network: net, address: mine.address, symbol: mine.symbol }, label: `${networkName(net)} DEX`, price: priceUsd, liquidity: liq, mcap: mine === b ? mc : null, maxLeverage: 1 };
   }
+  if (!best && other) best = { market: { venue: "gecko", network: net, address: addr, symbol: sym }, label: `${networkName(net)} DEX`, price: null, liquidity: 0, mcap: null, maxLeverage: 1, noMajor: true };
+  if (best && other && other.liquidity > (best.liquidity ?? 0)) best.other = other;
   return best ?? "none";
 }
 

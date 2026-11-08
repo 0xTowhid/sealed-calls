@@ -287,3 +287,8 @@ a.chrow:hover { background: #f3f5f9; }
 .picker-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .picker-bar label { margin: 0; }
 .picker-bar select { font-weight: 700; min-width: 220px; }
+
+.kind { display: inline-block; font-size: 11.5px; font-weight: 800; border: 1.5px solid currentColor; padding: 1px 6px; margin-left: 6px; vertical-align: 8px; letter-spacing: .02em; line-height: 1.4; font-stretch: 100%; }
+.kind.m { background: #7a3eb1; border-color: #7a3eb1; color: #fff; }
+.sub0 .kind, td .kind { vertical-align: 1px; margin-left: 4px; font-size: 10.5px; }
+.chips.kinds { margin: 6px 0 4px; }

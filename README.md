@@ -104,6 +104,7 @@ Creators get a shareable page at `/#/@<account>` with their record, money, and t
 
 ## Next
 
+- **Only pools paired with a major coin count** (SOL, USDC, ETH, …). A token whose deepest pool is paired with another memecoin (e.g. X/DJT) is judged on its SOL/USDC pool, because the USD value of a memecoin-vs-memecoin pool moves with both tokens and a real $500 buy would route through two pools.
 - **Micro-cap mode, next steps:** a check of the caller's own wallet (bought before posting, sold into followers), and a rug rule on liquidity history.
 - Weekly periods, the contract locked or upgraded only by a DAO, and late access through an OutLayer TEE instead of the creator's browser.
 

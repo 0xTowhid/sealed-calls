@@ -185,3 +185,37 @@ export function McapAtCall({ b, fill }: { b: SignalBody; fill?: string | null })
   if (b.market.venue !== "gecko_micro" || v == null) return null;
   return <div className="small sub0">called at ≈ {usdShort(v)} mcap</div>;
 }
+
+// ------------------------------------------------------------------ channel kinds
+
+export const KINDS = [["perps", "Perps"], ["dex", "DEX tokens"], ["micro", "Micro-caps"]] as const;
+const KIND_TAG: Record<string, string> = { perps: "PERPS", dex: "DEX", micro: "MICRO" };
+const VENUE_TAG = { hyperliquid: "perps", gecko: "dex", gecko_micro: "micro" } as const;
+
+/** Declared kinds plus every kind actually revealed; nothing declared and nothing revealed = all kinds. */
+export function kindsShown(tags: string[], signals: { body?: SignalBody | null }[]): string[] {
+  const shown = new Set<string>(signals.flatMap((x) => (x.body ? [VENUE_TAG[x.body.market.venue]] : [])));
+  const all = new Set([...tags, ...(tags.length ? shown : [])]);
+  const out = tags.length ? KINDS.map(([k]) => k).filter((k) => all.has(k)) : KINDS.map(([k]) => k).filter((k) => shown.has(k));
+  return out.length === 3 ? [] : out;
+}
+
+export function KindTags({ kinds }: { kinds: string[] }) {
+  if (!kinds.length) return <span className="kind">ALL KINDS</span>;
+  return <>{kinds.map((k) => <span key={k} className={`kind${k === "micro" ? " m" : ""}`}>{KIND_TAG[k]}</span>)}</>;
+}
+
+export function KindPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <>
+      <label>What you post here</label>
+      <div className="chips kinds" role="group" aria-label="What you post here">
+        {KINDS.map(([k, name]) => (
+          <button type="button" key={k} aria-pressed={value.includes(k)}
+            onClick={() => onChange(value.includes(k) ? value.filter((x) => x !== k) : KINDS.map(([x]) => x).filter((x) => x === k || value.includes(x)))}>{name}</button>
+        ))}
+      </div>
+      <div className="hint">Pick one for a niche channel, or leave all off for all kinds. This decides which Explore tabs list the channel before its signals open. Once signals end, the channel also shows in the tab of every kind it actually posted.</div>
+    </>
+  );
+}

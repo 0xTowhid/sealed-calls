@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { allSignals, call, claimable, currentPeriod, getChannel, getConfig, getMember, getPeriod, listChannels, periodHeld, subscribers } from "../near";
+import { allSignals, call, claimable, currentPeriod, channelTags, getChannel, getConfig, getMember, getPeriod, listChannels, periodHeld, subscribers } from "../near";
 import { creatorRecord, record, useLoad, useNow } from "../data";
 import { channelPath, day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
 import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
-import { Act, Countdown, LiveCells, LiveLine, McapAtCall, MicroTag, Outcome, Result, SideTag, rangeState } from "../ui";
+import { Act, KindPicker, KindTags, kindsShown, Countdown, LiveCells, LiveLine, McapAtCall, MicroTag, Outcome, Result, SideTag, rangeState } from "../ui";
 import { priceOf, venueLabel } from "../markets";
 import { GAS_300, NEAR } from "../config";
 import type { Channel, PeriodResult, Signal } from "../types";
@@ -37,11 +37,11 @@ async function load(id: number, account: string | null) {
       if (len > 0n) heldAhead += (BigInt(sb.held) * over) / len;
     }
   }
-  const channels = await listChannels();
+  const [channels, [tags]] = await Promise.all([listChannels(), channelTags([id])]);
   const whole = channels.filter((c) => c.creator === ch.creator).length > 1
     ? await creatorRecord(ch.creator, channels, (c) => (c.id === id ? Promise.resolve(signals) : allSignals(c.id, c.signal_count)))
     : null;
-  return { ch, cfg, signals, subs: subs.length, readers: subs.filter((x) => x[2]).map((x) => x[0]), cur, member, claim, periods, heldAhead, channels, whole };
+  return { ch, cfg, signals, subs: subs.length, readers: subs.filter((x) => x[2]).map((x) => x[0]), cur, member, claim, periods, heldAhead, channels, whole, tags: tags ?? [] };
 }
 
 export function ChannelPage({ id, account }: { id: number; account: string | null }) {
@@ -50,7 +50,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
   const [plan, setPlan] = useState<number | null>(null);
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading the channel from NEAR testnet…</p>;
-  const { ch, cfg, signals, subs, readers, cur, member, claim, periods, heldAhead, channels, whole } = data;
+  const { ch, cfg, signals, subs, readers, cur, member, claim, periods, heldAhead, channels, whole, tags } = data;
   const rec = record(ch, signals);
   const word = periodWord(cfg.period_minutes);
   const periodMs = cfg.period_minutes * 60_000;
@@ -80,7 +80,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
           <div className="owner-head">
             <div>
               <div className="sub0 small">{ch.creator} · creator since {day(ch.created_at_ms)}{isCreator && <> · <span className="only">YOUR CHANNEL</span></>}</div>
-              <h1 className="display m">{ch.name}{whole && rec.scored === 0 && <> <span className="newch">NEW CHANNEL</span></>}</h1>
+              <h1 className="display m">{ch.name}<KindTags kinds={kindsShown(tags, signals)} />{whole && rec.scored === 0 && <> <span className="newch">NEW CHANNEL</span></>}</h1>
               {ch.about && <p className="lede">{ch.about}</p>}
             </div>
             {isCreator && <a className="btn" href="#/desk">+ New signal</a>}
@@ -173,7 +173,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
 
       <div>
         {isCreator && <OwnerLive signals={signals} readers={readers} account={account!} now={now} />}
-        {isCreator && <EditChannel ch={ch} onDone={reload} />}
+        {isCreator && <EditChannel ch={ch} tags={tags} onDone={reload} />}
         {!isCreator && <section className="sheet">
           <h2>{active ? "Your subscription" : "Subscribe"}</h2>
           {active && <p className="notice ok-n">Active until <b>{when(member!.until_ms)}</b>. Signals appear in <a href="#/feed">My feed</a>. You can extend below.</p>}
@@ -330,8 +330,9 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
 
 const DURATIONS = [7, 14, 30, 180, 365];
 
-function EditChannel({ ch, onDone }: { ch: Channel; onDone: () => void }) {
+function EditChannel({ ch, tags, onDone }: { ch: Channel; tags: string[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
+  const [kinds, setKinds] = useState<string[]>(tags);
   const [name, setName] = useState(ch.name);
   const [about, setAbout] = useState(ch.about);
   const [max, setMax] = useState(String(ch.max_members));
@@ -342,13 +343,14 @@ function EditChannel({ ch, onDone }: { ch: Channel; onDone: () => void }) {
       <h2>Subscribe</h2>
       <p className="sub">Visitors see your plans here: {ch.plans.map((p) => `${near(p.price)} / ${planName(p.days)}`).join(", ")}.</p>
       {!open ? (
-        <button className="btn ghost wide" onClick={() => setOpen(true)}>Edit plans and description</button>
+        <button className="btn ghost wide" onClick={() => { setKinds(tags); setOpen(true); }}>Edit plans, kinds and description</button>
       ) : (
         <div>
           <label htmlFor="en">Channel name</label>
           <input id="en" type="text" maxLength={48} value={name} onChange={(e) => setName(e.target.value)} />
           <label htmlFor="ea">What you post</label>
           <textarea id="ea" maxLength={400} value={about} onChange={(e) => setAbout(e.target.value)} />
+          <KindPicker value={kinds} onChange={setKinds} />
           <label>Prices in NEAR <span className="sub0">(empty = no such plan; new prices apply to new subscriptions)</span></label>
           <div className="plan-edit">
             {days.map((d) => (
@@ -362,7 +364,9 @@ function EditChannel({ ch, onDone }: { ch: Channel; onDone: () => void }) {
             <Act label="Save changes" busyLabel="Waiting for the wallet…" disabled={!name.trim() || !days.some((d) => Number(prices[d]) > 0)}
               run={async () => {
                 const plans = days.filter((d) => Number(prices[d]) > 0).map((d) => ({ days: d, price: NEAR(Number(prices[d])) }));
-                await call("update_channel", { channel: ch.id, name: name.trim(), about: about.trim(), plans, max_members: Math.min(100, Math.max(1, Number(max) || 1)) });
+                await call("update_channel", { channel: ch.id, name: name.trim(), about: about.trim(), plans, max_members: Math.min(100, Math.max(1, Number(max) || 1)), tags: kinds },
+                  // a small storage deposit only when the kinds change; the rest is refunded
+                  kinds.join() === tags.join() ? "0" : NEAR(0.01));
                 setOpen(false);
                 onDone();
               }} />

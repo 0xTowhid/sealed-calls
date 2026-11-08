@@ -5,7 +5,7 @@ import { dur, near, pct, periodWord, planName, price, sig, when } from "../forma
 import { creatorSecret, exportSecret, importSecret, openWithKey, seal, signalKey, wrapFor } from "../crypto";
 import { priceOf, searchMarkets, usdShort, type Found } from "../markets";
 import { MicroTag } from "../ui";
-import { Act, SignalFace } from "../ui";
+import { Act, KindPicker, SignalFace } from "../ui";
 import { GAS_100, HL_TAKER_FEE, NEAR } from "../config";
 import type { Channel, Signal, SignalBody } from "../types";
 import { MICRO_FLOOR_USD } from "../types";
@@ -78,6 +78,7 @@ function CreateChannel({ onDone, word, first }: { onDone: () => void; word: stri
   const [about, setAbout] = useState("");
   const [max, setMax] = useState("100");
   const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const [kinds, setKinds] = useState<string[]>([]);
   const valid = name.trim() && plans.some((p) => Number(p.price) > 0);
   return (
     <div className="g-desk">
@@ -89,6 +90,7 @@ function CreateChannel({ onDone, word, first }: { onDone: () => void; word: stri
         <input id="cn" type="text" value={name} maxLength={48} onChange={(e) => setName(e.target.value)} placeholder="e.g. 0xTowhid Calls" />
         <label htmlFor="ca">What you post</label>
         <textarea id="ca" value={about} maxLength={400} onChange={(e) => setAbout(e.target.value)} placeholder="Perps and Solana memecoins. Usually 3–10x, 1–3 days." />
+        <KindPicker value={kinds} onChange={setKinds} />
         <label>Prices in NEAR <span className="sub0">(leave empty to skip a plan)</span></label>
         <div className="plan-edit">
           {plans.map((p, i) => (
@@ -104,7 +106,7 @@ function CreateChannel({ onDone, word, first }: { onDone: () => void; word: stri
         <Act className="btn wide" label="Create channel" busyLabel="Waiting for the wallet…" disabled={!valid}
           run={async () => {
             const ps = plans.filter((p) => Number(p.price) > 0).map((p) => ({ days: p.days, price: NEAR(Number(p.price)) }));
-            await call("create_channel", { name: name.trim(), about: about.trim(), plans: ps, max_members: Math.min(100, Math.max(1, Number(max) || 1)) }, NEAR(0.05));
+            await call("create_channel", { name: name.trim(), about: about.trim(), plans: ps, max_members: Math.min(100, Math.max(1, Number(max) || 1)), tags: kinds }, NEAR(0.05));
             onDone();
           }} />
       </section>
@@ -236,7 +238,14 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
         )}
         {!sel && q.trim() && searching && <div className="hint">Searching Hyperliquid and DEX pools…</div>}
         {!sel && q.trim() && !searching && note && <div className="hint bad">{note}</div>}
-        {tooThin && <div className="hint bad">This pool has under {usdShort(MICRO_FLOOR_USD)} liquidity. Pools that thin can't be called, even as micro-cap signals.</div>}
+        {tooThin && (
+          <div className="hint bad">
+            {sel!.noMajor
+              ? <>{sel!.market.symbol} has no pool against SOL, USDC or another major coin{sel!.other ? <> (its {usdShort(sel!.other.liquidity)} pool is paired with {sel!.other.symbol})</> : null}. </>
+              : <>{sel!.market.symbol}'s pool against SOL, USDC or another major coin has {usdShort(sel!.liquidity ?? 0)} liquidity{sel!.other ? <>; its bigger {usdShort(sel!.other.liquidity)} pool is paired with {sel!.other.symbol}, another token, so it doesn't count</> : null}. </>}
+            Signals are scored only on pools paired with a major coin, and those need at least {usdShort(MICRO_FLOOR_USD)}, even for micro-caps.
+          </div>
+        )}
 
         {dex && micro && !tooThin ? (
           <div className="notice micro-box">

@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { allSignals, channelTags, getConfig, listChannels, subscribers } from "../near";
 import { record, useLoad } from "../data";
 import { near, pct, periodWord, planName } from "../format";
-import { TickLegend, Ticks } from "../ui";
+import { KindTags, kindsShown, TickLegend, Ticks } from "../ui";
 import { mcapAtCall, usdShort } from "../markets";
 import type { Channel, Config, Signal } from "../types";
 
 type Kind = "perp" | "dex" | "micro";
-type Row = { ch: Channel; signals: Signal[]; subs: number; rec: ReturnType<typeof record>; kinds: Set<Kind> };
+type Row = { ch: Channel; signals: Signal[]; subs: number; rec: ReturnType<typeof record>; kinds: Set<Kind>; tags: string[] };
 
 const KIND_OF = { hyperliquid: "perp", gecko: "dex", gecko_micro: "micro" } as const;
 const TAG_KIND: Record<string, Kind> = { perps: "perp", dex: "dex", micro: "micro" };
@@ -27,7 +27,7 @@ async function loadAll(): Promise<{ cfg: Config; rows: Row[] }> {
   const rows = await Promise.all(
     channels.map(async (ch, i) => {
       const [signals, subs] = await Promise.all([allSignals(ch.id, ch.signal_count), subscribers(ch.id)]);
-      return { ch, signals, subs: subs.length, rec: record(ch, signals), kinds: kindsOf(tags[i] ?? [], signals) };
+      return { ch, signals, subs: subs.length, rec: record(ch, signals), kinds: kindsOf(tags[i] ?? [], signals), tags: tags[i] ?? [] };
     }),
   );
   rows.sort((a, b) => (b.rec.score_bps ?? -1e9) - (a.rec.score_bps ?? -1e9) || b.rec.scored - a.rec.scored);
@@ -134,7 +134,7 @@ export function Explore() {
                 {rows.map((r, i) => (
                   <tr key={r.creator} onClick={() => (window.location.hash = `#/@${r.creator}`)} className="click">
                     <td className="rank">{i + 1}</td>
-                    <td><a href={`#/@${r.creator}`} className="cname">{r.chans.length === 1 ? r.chans[0].ch.name : r.creator}</a><div className="sub0 small">{r.chans.length === 1 ? r.creator : r.inTab.map((c) => c.ch.name).join(" · ")}</div></td>
+                    <td><a href={`#/@${r.creator}`} className="cname">{r.chans.length === 1 ? r.chans[0].ch.name : r.creator}</a>{r.chans.length === 1 && <KindTags kinds={kindsShown(r.chans[0].tags, r.chans[0].signals)} />}<div className="sub0 small">{r.chans.length === 1 ? r.creator : r.inTab.map((c, j) => <span key={c.ch.id}>{j ? " · " : ""}{c.ch.name}<KindTags kinds={kindsShown(c.tags, c.signals)} /></span>)}</div></td>
                     <td>{r.sigs.length || filter === "all" ? <Ticks signals={r.sigs} /> : <span className="sub0 small">None ended yet</span>}</td>
                     <td className="n">{r.chans.length}</td>
                     <td className="n">{r.rec.signals}</td>
