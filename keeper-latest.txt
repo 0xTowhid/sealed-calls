@@ -1,23 +1,13 @@
-=== keep  commit 14a93380c4be271c9b99093cc4caac45d9e76349  Sun Nov  8 11:16:06 UTC 2026
-[11:16:09] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[11:16:13] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.394780969182681207407422 NEAR 
-[11:16:16] channel 0 signal 2: revealing from drand
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":2,"channel":0,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
-[11:16:20] channel 0: scoring signals [2] on OutLayer
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[2]}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13368,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
+=== keep  commit 14a93380c4be271c9b99093cc4caac45d9e76349  Sun Nov  8 17:13:01 UTC 2026
+[17:13:05] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[17:13:09] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           5.388548810025723607407422 NEAR 
+[17:13:12] channel 0: scoring signals [5] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[5]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13695,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
     │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":2,"r_bps":-237,"outcome":"sl"}]}]}
-    signal 2 ZEC -2.37% sl
-[11:16:46] period 0 has not ended yet (current 0)
-[11:16:49] period 0 has not ended yet (current 0)
-[11:16:50] channel 2 signal 6: revealing from drand
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":6,"channel":2,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
-[11:16:54] channel 2: scoring signals [6] on OutLayer
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[6]}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":13370,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":6,"r_bps":0,"outcome":"not_filled"}]}]}
-    signal 6 coin 0% not_filled
-[11:17:22] period 0 has not ended yet (current 0)
-[11:17:22] keeper done
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":5,"r_bps":-10000,"outcome":"below_floor"}]}]}
+    signal 5 HOPE -100% below_floor
+[17:13:40] period 0 has not ended yet (current 0)
+[17:13:44] period 0 has not ended yet (current 0)
+[17:13:47] period 0 has not ended yet (current 0)
+[17:13:47] keeper done
