@@ -2,24 +2,35 @@ import { useCallback, useEffect, useState } from "react";
 import { accountId, wallet } from "./near";
 import type { Channel, Signal } from "./types";
 
-/** Runs `fn` now, on `deps` change and every `refreshMs`; keeps the last good value. */
-export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], refreshMs = 20_000) {
-  const [data, setData] = useState<T | null>(null);
+/** Last good result per page, so going back to a page shows it at once while it refreshes. */
+const cache = new Map<string, unknown>();
+
+/**
+ * Runs `fn` now, on `deps` change and every `refreshMs`; keeps the last good value.
+ * With a `key`, the last result is shown immediately on revisits (stale-while-revalidate).
+ */
+export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], refreshMs = 20_000, key?: string) {
+  const [data, setData] = useState<T | null>(() => (key && cache.has(key) ? (cache.get(key) as T) : null));
   const [error, setError] = useState<string | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const load = useCallback(fn, deps);
+  useEffect(() => {
+    setData(key && cache.has(key) ? (cache.get(key) as T) : null);
+  }, [key]);
   const run = useCallback(async () => {
     try {
-      setData(await load());
+      const v = await load();
+      if (key) cache.set(key, v);
+      setData(v);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [load]);
+  }, [load, key]);
   useEffect(() => {
     run();
     if (!refreshMs) return;
-    const t = setInterval(run, refreshMs);
+    const t = setInterval(() => { if (!document.hidden) run(); }, refreshMs);
     return () => clearInterval(t);
   }, [run, refreshMs]);
   return { data, error, reload: run };

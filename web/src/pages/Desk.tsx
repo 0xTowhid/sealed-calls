@@ -19,7 +19,7 @@ async function load(account: string) {
 }
 
 export function Desk({ account }: { account: string | null }) {
-  const { data, error, reload } = useLoad(() => (account ? load(account) : Promise.resolve(null)), [account], 30_000);
+  const { data, error, reload } = useLoad(() => (account ? load(account) : Promise.resolve(null)), [account], 30_000, `desk:${account}`);
   if (!account) return <section className="sheet"><h2>Creator desk</h2><p className="sub">Connect a wallet to start a channel or post signals.</p></section>;
   if (error) return <div className="notice err">{error}</div>;
   if (!data) return <p className="empty">Reading your channel…</p>;

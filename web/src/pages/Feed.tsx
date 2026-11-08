@@ -25,7 +25,7 @@ async function load(account: string) {
 }
 
 export function Feed({ account }: { account: string | null }) {
-  const { data, error, reload } = useLoad(() => (account ? load(account) : Promise.resolve(null)), [account], 20_000);
+  const { data, error, reload } = useLoad(() => (account ? load(account) : Promise.resolve(null)), [account], 20_000, `feed:${account}`);
   const now = useNow(1000);
   const [opened, setOpened] = useState<Record<number, Opened | string>>({});
   const [prices, setPrices] = useState<Record<number, number | null>>({});

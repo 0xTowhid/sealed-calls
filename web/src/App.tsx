@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { listChannels, signIn, signOut } from "./near";
 import { useAccount, useLoad } from "./data";
 import { Explore } from "./pages/Explore";
-import { ChannelPage } from "./pages/Channel";
-import { Feed } from "./pages/Feed";
-import { Desk } from "./pages/Desk";
+// Pages that need the crypto libraries (drand timelock, libsodium) load on demand.
+const ChannelPage = lazy(() => import("./pages/Channel").then((m) => ({ default: m.ChannelPage })));
+const Feed = lazy(() => import("./pages/Feed").then((m) => ({ default: m.Feed })));
+const Desk = lazy(() => import("./pages/Desk").then((m) => ({ default: m.Desk })));
 
 function useRoute() {
   const [hash, setHash] = useState(window.location.hash);
@@ -19,7 +20,7 @@ function useRoute() {
 export default function App() {
   const route = useRoute();
   const account = useAccount();
-  const channels = useLoad(listChannels, [], 60_000).data;
+  const channels = useLoad(listChannels, [], 60_000, "channels").data;
   const mine = channels?.find((c) => c.creator === account) ?? null;
   const at = route[0]?.startsWith("@") ? route[0].slice(1) : null;
   const page = at ? (at === account ? "mine" : "c") : route[0] === "mine" ? "mine" : route[0] || "explore";
@@ -48,6 +49,7 @@ export default function App() {
         </nav>
       </header>
 
+      <Suspense fallback={<p className="empty">Loading…</p>}>
       {page === "explore" && <Explore />}
       {page === "c" && !at && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
       {(at || page === "mine") && (() => {
@@ -58,6 +60,7 @@ export default function App() {
       })()}
       {page === "feed" && <Feed account={account} />}
       {page === "desk" && <Desk account={account} />}
+      </Suspense>
 
       <p className="fine foot">
         Signals can't be edited, deleted or hidden, and become public when they end. Results are indicative: they replay each signal on public

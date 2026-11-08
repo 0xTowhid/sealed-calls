@@ -20,7 +20,7 @@ async function loadAll(): Promise<{ cfg: Config; rows: Row[] }> {
 }
 
 export function Explore() {
-  const { data, error } = useLoad(loadAll, [], 30_000);
+  const { data, error } = useLoad(loadAll, [], 30_000, "explore");
   const [filter, setFilter] = useState<"all" | "perp" | "dex">("all");
   const word = data ? periodWord(data.cfg.period_minutes) : "week";
   const rows = (data?.rows ?? []).filter(

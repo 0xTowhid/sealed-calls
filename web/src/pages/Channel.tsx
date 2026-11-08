@@ -41,7 +41,7 @@ async function load(id: number, account: string | null) {
 }
 
 export function ChannelPage({ id, account }: { id: number; account: string | null }) {
-  const { data, error, reload } = useLoad(() => load(id, account), [id, account], 20_000);
+  const { data, error, reload } = useLoad(() => load(id, account), [id, account], 20_000, `channel:${id}:${account}`);
   const now = useNow(5000);
   const [plan, setPlan] = useState<number | null>(null);
   if (error) return <div className="notice err">{error}</div>;
