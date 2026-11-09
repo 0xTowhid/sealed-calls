@@ -109,6 +109,9 @@ settle_ready() {
     local NP; NP=$(view get_channel "{\"channel\":$CH}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).next_period))")
     local CUR; CUR=$(view current_period "{\"channel\":$CH}")
     [ "$NP" -lt "$CUR" ] || { log "period $NP has not ended yet (current $CUR)"; break; }
+    # A period settles only when every signal posted in it has ended and been revealed.
+    local WAIT; WAIT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const w=JSON.parse(s).filter(x=>x.period==$NP&&x.status==='Sealed');console.log(w.map(x=>x.id+' (opens '+new Date(x.posted_at_ms+x.valid_min*60000).toISOString().slice(0,16)+'Z)').join(', '))})")
+    [ -z "$WAIT" ] || { log "period $NP waits for sealed signal(s): $WAIT"; return 0; }
     log "settle channel $CH period $NP (held $(view period_held "{\"channel\":$CH,\"period\":$NP}"))"
     call "$MAIN" "$C" settle "{\"channel\":$CH}" '0.5 NEAR' 300
     local R=null
