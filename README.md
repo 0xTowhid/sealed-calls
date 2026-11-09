@@ -131,7 +131,7 @@ Other building blocks: drand quicknet timelock (tlock) for the public copy, X255
 
 ## Built during the hackathon
 
-There is no pre-hackathon code. The repository's first commit is 2026-11-06 (after the 2026-10-19 start); everything here was written during the event. The tag [`hackathon-submission`](https://github.com/0xTowhid/sealed-calls/tree/hackathon-submission) marks the submitted version.
+There is no pre-hackathon code. The repository's first commit is 2026-11-06 (after the 2026-10-19 start); everything here was written during the event. The submitted version is the last commit on `main` before the deadline (2026-11-14 23:59 UTC).
 
 Other project by the same author, independent of this one: [Pixel Bazaar](https://github.com/0xTowhid/pixel-bazaar). No other chain is integrated: Hyperliquid and GeckoTerminal are read-only price sources for scoring.
 
