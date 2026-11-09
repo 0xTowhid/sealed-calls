@@ -1,0 +1,67 @@
+=== e2e  commit 0cad11ed5826de8e5c95bc2910f739cbbd4c32c8  Mon Nov  9 08:20:51 UTC 2026
+[08:20:55] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[08:21:34] wasm sha256 eb5fc0a6f6ad8c3581084216c3785bbf8d53b6ce30fa478ac7badf97c97a35bc
+[08:21:37] 0. throwaway contract e2e090820.to69.testnet with a 20-minute period (3.95 NEAR for storage; to69.testnet has Native account balance           5.385460761039481607407422 NEAR )
+New account <e2e090820.to69.testnet> has been successfully created.
+[08:22:00] 1. to69.testnet creates a channel: 1 day for 0.2 NEAR, 7 days for 1 NEAR
+    │    Transaction ID: A7n4KmLZkFeqG91ndiusU8Le16saNyhUfj8Jdrc9ZY7n
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"channel_created","data":[{"channel":0,"creator":"to69.testnet"}]}
+    Function execution return value (printed to stdout):
+[08:22:05] 2. m1.to69.testnet subscribes (1 day) and registers a key; m2.to69.testnet subscribes without a key
+    │    Transaction ID: 2QYEBywbspMBk3aC5ENhk9rXC6DTDtqN72iugErSJofV
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"subscribed","data":[{"channel":0,"member":"m1.to69.testnet","plan":0,"price":"200000000000000000000000","to_creator":"100000000000000000000064","held":"100000000000000000000000","until_ms":1794298927151}]}
+    Function execution return value (printed to stdout):
+    │    Transaction ID: 7MTo2UHTCBQGKG6YeSVrECz3LCQRNWeQTiUD2gpVwXZ1
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"key_registered","data":[{"channel":0,"member":"m1.to69.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+    │    Transaction ID: 8Lg7Yxmpzt4hztRNNQVjh9pwwtG3RKtK8W3WWv8bjFER
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"subscribed","data":[{"channel":0,"member":"m2.to69.testnet","plan":0,"price":"200000000000000000000000","to_creator":"100000000000000000000064","held":"100000000000000000000000","until_ms":1794298936174}]}
+    Function execution return value (printed to stdout):
+[08:22:20]    subscribers: [["m1.to69.testnet",1794298927151,true],["m2.to69.testnet",1794298936174,false]]
+[08:22:20]    held for period 0: 2756042824074074074073  (half of 0.4 NEAR, spread over each day)
+[08:22:21] 3. seal + post a BTC long (valid 15 min) for readers [["m1.to69.testnet","FaHzOHzy2Lu2l8GajGxpdDZp6d/jDNs2i8n2qyFl1BE="]]: {"market":{"venue":"hyperliquid","address":"BTC","symbol":"BTC"},"side":"long","leverage":5,"entry_low":"73729","entry_high":"74470","tps":["74544","75581"],"sl":"72618","msg":"E2E: BTC long around 74100"}
+{"commit":"c9ea4ad1edc70981d3d8387a9687d543f81f543aeaf29212323c4854404a3eb1","reveal_round":33803379,"tlock_bytes":991,"wrapped":1}
+    │    Transaction ID: 4yAbPjyqrBw1GbecodJBUEhJu9k9xgTSuy4nJvwcUdgx
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_posted","data":[{"channel":0,"signal":0,"creator":"to69.testnet","period":0,"valid_min":15,"opens_at_ms":1794213443424,"reveal_round":33803379,"commit":"c9ea4ad1edc70981d3d8387a9687d543f81f543aeaf29212323c4854404a3eb1"}]}
+    Function execution return value (printed to stdout):
+[08:22:30] 4. member reads it now: {"plaintext":"{\"v\":2,\"channel\":0,\"creator\":\"to69.testnet\",\"valid_min\":15,\"market\":{\"venue\":\"hyperliquid\",\"network\":null,\"address\":\"BTC\",\"symbol\":\"BTC\"},\"side\":\"long\",\"leverage\":5,\"entry_low\":\"73729\",\"entry_high\":\"74470\",\"tps\":[\"74544\",\"75581\"],\"sl\":\"72618\",\"msg\":\"E2E: BTC long around 74100\",\"salt\":\"e309f55b88984420a4211247beacaa43\"}","matches":true}
+[08:22:31]    public tlock-open now (must fail): ERROR: It's too early to decrypt the ciphertext - decryptable at round 33803379
+[08:22:31] 4b. late access: m2.to69.testnet sets up a key only now; the creator shares the live signal with them
+    │    Transaction ID: 8ezYoU6R7z6FYYEoxuQgDjn4sisqtKSjtNfJD3n3x3ph
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"key_registered","data":[{"channel":0,"member":"m2.to69.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_shared","data":[{"signal":0,"channel":0,"members":["m2.to69.testnet"]}]}
+[08:22:43]    late subscriber reads it: {"plaintext":"{\"v\":2,\"channel\":0,\"creator\":\"to69.testnet\",\"valid_min\":15,\"market\":{\"venue\":\"hyperliquid\",\"network\":null,\"address\":\"BTC\",\"symbol\":\"BTC\"},\"side\":\"long\",\"leverage\":5,\"entry_low\":\"73729\",\"entry_high\":\"74470\",\"tps\":[\"74544\",\"75581\"],\"sl\":\"72618\",\"msg\":\"E2E: BTC long around 74100\",\"salt\":\"e309f55b88984420a4211247beacaa43\"}","matches":true}
+[08:22:43]    early reveal (must fail):
+    [31m├  ERROR Transaction failed
+    │    Transaction ID: 7nbGT9afPNxKn47UsEKKfzbBmEH4ZzW7Q2fHe1cUqRcm
+    Error: 
+       0: [91mError: An error occurred during a `FunctionCall` action.
+          ExecutionError("Smart contract panicked: panicked at src/lib.rs:626:9:\nsignal is still valid; it opens when its validity ends")[0m
+[08:22:47] 5. after validity, anyone reveals from drand
+[08:22:47] signal 0: waiting 944s for drand
+[08:38:39] signal 0 opened from drand: {"plaintext":"{\"v\":2,\"channel\":0,\"creator\":\"to69.testnet\",\"valid_min\":15,\"market\":{\"venue\":\"hyperliquid\",\"network\":null,\"address\":\"BTC\",\"symbol\":\"BTC\"},\"side\":\"long\",\"leverage\":5,\"entry_low\":\"73729\",\"entry_high\":\"74470\",\"tps\":[\"74544\",\"75581\"],\"sl\":\"72618\",\"msg\":\"E2E: BTC long around 74100\",\"salt\":\"e309f55b88984420a4211247beacaa43\"}","matches":true}
+    │    Transaction ID: 8V8MdfcpWFLr5GjiB8CkHPuWK3SC67NrfehrTksYw3t2
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":0,"channel":0,"creator":"to69.testnet","valid":true,"by":"m2.to69.testnet"}]}
+    ├  Function execution return value:
+    │    Empty return value
+[08:38:44]    revealed: {"status":{"Revealed":{"by":"m2.to69.testnet","at_ms":1794213521297}},"body":{"market":{"venue":"hyperliquid","network":null,"address":"BTC","symbol":"BTC"},"side":"long","leverage":5,"entry_low":"73729","entry_high":"74470","tps":["74544","75581"],"sl":"72618","msg":"E2E: BTC long around 74100"}}
+[08:38:44] 5b. official score right after the end (score_signals on OutLayer)
+[08:38:45] channel 0: scoring signals [0] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[0]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":14492,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"e2e090820.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTo
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/15a4c9754235e3570b56e439c06b154a60d3df7b/scorer.wasm","hash":"0ecece80a929002
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":0,"r_bps":8,"outcome":"expired"}]}]}
+    signal 0 BTC 0.08% expired
+[08:39:08] 6. wait for period 0 to end (190s), then settle (scores already on-chain: no OutLayer call)
+[08:42:20] settle channel 0 period 0 (held 2756042824074074074073)
+    Error: 
+       0: [91mError: Account <to69.testnet> does not have enough balance (0.60295472453334710740755 NEAR) to cover TX cost (0.8009189985318045 NEAR).[0m
+[08:42:42]    scoring failed; period reopened
+[08:42:42]    period 0: null
+[08:42:42] E2E FAIL at settle
+[08:42:42] deleting e2e090820.to69.testnet (NEAR back to to69.testnet)
