@@ -41,14 +41,22 @@ jobs:
           echo "actions=$A" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - name: cache NEAR tools
+        uses: actions/cache@v4
+        with: { path: "~/.cargo/bin/near\n~/.cargo/bin/cargo-near", key: near-tools-v1 }
       - name: install near-cli-rs
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+        run: |   # GitHub release downloads sometimes 504: use the cache, retry, then build from crates.io
+          command -v near && exit 0
+          for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh && exit 0; sleep 20; done
+          sudo apt-get install -y -qq libudev-dev >/dev/null 2>&1 || true
+          cargo install near-cli-rs --locked
       - uses: dtolnay/rust-toolchain@stable
         if: contains(steps.act.outputs.actions, 'deploy') || contains(steps.act.outputs.actions, 'e2e')
         with: { targets: wasm32-unknown-unknown }
       - name: install cargo-near
         if: contains(steps.act.outputs.actions, 'deploy') || contains(steps.act.outputs.actions, 'e2e')
-        run: |   # GitHub release downloads sometimes 504: retry, then build from crates.io
+        run: |   # GitHub release downloads sometimes 504: use the cache, retry, then build from crates.io
+          command -v cargo-near && exit 0
           for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh && exit 0; sleep 20; done
           cargo install cargo-near --locked
       - name: scorer location (pinned to the current dist commit)
