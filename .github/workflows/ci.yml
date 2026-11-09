@@ -38,6 +38,7 @@ jobs:
       - name: install cargo-near
         run: |   # GitHub release downloads sometimes 504: retry, then build from crates.io
           for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh && exit 0; sleep 20; done
+          sudo apt-get update -qq && sudo apt-get install -y -qq libudev-dev pkg-config
           cargo install cargo-near --locked
       - run: mkdir -p results dist
       - name: build contract
