@@ -1,15 +1,25 @@
-=== keep  commit 14a93380c4be271c9b99093cc4caac45d9e76349  Mon Nov  9 01:10:18 UTC 2026
-[01:10:22] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[01:10:24] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           5.385707015477808207407422 NEAR 
-[01:10:27] settle channel 0 period 0 (held 10689271990740740740740)
-    [31m├  ERROR Transaction failed
-    │    Transaction ID: 6rnBjvG1Hu5ACBoiVB6B7KwTi1gcAW1Yi8fBKYnZCR9F
-    Error: 
-       0: [91mError: An error occurred during a `FunctionCall` action.
-          ExecutionError("Smart contract panicked: panicked at src/lib.rs:681:13:\nsignal 3 is still sealed")[0m
-[01:10:53]    scoring failed; period reopened
-[01:10:53]    period 0: null
-[01:10:53] channel 0: settlement not finished this round
-[01:10:55] period 0 has not ended yet (current 0)
-[01:10:58] period 0 has not ended yet (current 0)
-[01:10:58] keeper done
+=== keep  commit 0cad11ed5826de8e5c95bc2910f739cbbd4c32c8  Mon Nov  9 08:43:08 UTC 2026
+[08:43:11] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[08:43:15] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           4.777207611140073107407422 NEAR 
+[08:43:17] channel 0 signal 4: revealing from drand
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":4,"channel":0,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
+[08:43:22] channel 0: scoring signals [4] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[4]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":14498,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":4,"r_bps":-298,"outcome":"tp1+sl"}]}]}
+    signal 4 BNB -2.98% tp1+sl
+[08:43:47] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
+[08:43:51] settle channel 1 period 0 (held 0)
+    │    Transaction ID: 6JQdNobB2RT9GbFQNTVQ7sbFW9rT2V79RJwo6Xi6faS6
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":0,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+    Function execution return value (printed to stdout):
+[08:43:57]    period 0: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794213833295}
+[08:43:58] period 1 has not ended yet (current 1)
+[08:44:01] settle channel 2 period 0 (held 712813244047619047619)
+    │    Transaction ID: 4YWQHUrZZpyKb5eDN6TgGXDJJ4oTCCEQaBfH2pZKDPZw
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":0,"signals":1,"score_bps":0,"released":false,"held":"712813244047619047619"}]}
+    Function execution return value (printed to stdout):
+[08:44:06]    period 0: {"status":"Settled","signals":1,"sum_bps":0,"score_bps":0,"released":false,"held":"712813244047619047619","settled_at_ms":1794213843005}
+[08:44:07] period 1 has not ended yet (current 1)
+[08:44:07] keeper done
