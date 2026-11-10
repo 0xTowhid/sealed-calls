@@ -278,6 +278,15 @@ table.lb th { padding: 11px 16px; }
 .whole .row b { font-family: var(--mono); font-weight: 500; }
 .whole table { margin-top: 10px; }
 .whole th, .whole td { background: none !important; }
+.whole td:first-child { white-space: normal; overflow-wrap: anywhere; }
+.whole td:first-child .ink3 { display: block; font-size: 12px; }
+@media (max-width: 520px) {
+  .whole { padding: 12px 12px; font-size: 13px; }
+  .whole table.wk th, .whole table.wk td { padding: 8px 4px; font-size: 12.5px; }
+  .whole table.wk th { white-space: normal; line-height: 1.25; }
+  .whole table.wk td:first-child, .whole table.wk th:first-child { padding-left: 0; }
+  .whole table.wk td:last-child, .whole table.wk th:last-child { padding-right: 0; }
+}
 .share { display: flex; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .share .url { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--line); background: var(--sunk); padding: 0 10px; height: 32px; display: inline-flex; align-items: center; border-radius: 8px; overflow-wrap: anywhere; color: var(--ink2); }
 .money { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 16px; background: var(--sunk); border-radius: 10px; }

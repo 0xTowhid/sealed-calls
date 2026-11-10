@@ -144,7 +144,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                   <thead><tr><th>Channel</th><th className="n">Calls</th><th className="n">Score</th><th className="n">{Word}s paid</th></tr></thead>
                   <tbody>
                     {whole.per.map((x) => (
-                      <tr key={x.ch.id}><td><a href={channelPath(x.ch, channels)}>{x.ch.name}</a>{x.ch.id === ch.id ? <span className="ink3"> (this one)</span> : ""}</td><td className="n">{x.rec.signals}</td><td className={`n ${cls(x.rec.score_bps)}`}>{pct(x.rec.score_bps)}</td><td className="n">{x.rec.periodsSettled ? `${x.rec.periodsEarned} of ${x.rec.periodsSettled}` : "—"}</td></tr>
+                      <tr key={x.ch.id}><td><a href={channelPath(x.ch, channels)}>{x.ch.name}</a>{x.ch.id === ch.id ? <span className="ink3">this channel</span> : ""}</td><td className="n">{x.rec.signals}</td><td className={`n ${cls(x.rec.score_bps)}`}>{pct(x.rec.score_bps)}</td><td className="n">{x.rec.periodsSettled ? `${x.rec.periodsEarned} of ${x.rec.periodsSettled}` : "—"}</td></tr>
                     ))}
                   </tbody>
                 </table>
