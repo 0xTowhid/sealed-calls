@@ -4,7 +4,7 @@ const q = new URLSearchParams(window.location.search);
 export const NETWORK = "testnet" as const;
 export const CONTRACT = q.get("contract") ?? (import.meta.env.VITE_CONTRACT as string | undefined) ?? "app.to69.testnet";
 
-export const RPCS = ["https://test.rpc.fastnear.com", "https://rpc.testnet.near.org"];
+export const RPCS = ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://near-testnet.lava.build"];
 export const EXPLORER = "https://testnet.nearblocks.io";
 export const GT = "https://api.geckoterminal.com/api/v2";
 export const HL = "https://api.hyperliquid.xyz/info";

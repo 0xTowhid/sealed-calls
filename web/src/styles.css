@@ -213,6 +213,10 @@ table.wk td:last-child, table.wk th:last-child { padding-right: 0; }
 .flow3 .lv span:nth-child(odd) { color: var(--ink3); font-family: var(--sans); }
 .flow3 .s3 { background: var(--mint-soft); border-color: var(--mint-line); }
 .flow3 .s3 .big3 { font-family: var(--mono); font-size: 30px; font-weight: 500; color: var(--gain); margin-top: auto; letter-spacing: -1px; }
+.flow3 .s3.lost { background: var(--loss-soft); border-color: #F6CBD0; }
+.flow3 .s3.flat { background: var(--sunk); border-color: var(--line); }
+.flow3 .s3 .big3.loss { color: var(--loss); }
+.flow3 .s3 .big3.ink3 { color: var(--ink3); }
 .lock { display: inline-block; width: 11px; height: 9px; border-radius: 2px; background: currentColor; position: relative; margin: 5px 3px 0 1px; flex: none; }
 .lock::before { content: ""; position: absolute; left: 2px; right: 2px; top: -5px; height: 7px; border: 1.6px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0; }
 

@@ -17,7 +17,8 @@ export async function view<T>(method: string, args: object = {}): Promise<T> {
     params: { request_type: "call_function", finality: "optimistic", account_id: CONTRACT, method_name: method, args_base64: enc(JSON.stringify(args)) },
   };
   let last = "";
-  for (const url of RPCS) {
+  for (let round = 0; round < 2; round++) for (const url of RPCS) {
+    if (round) await new Promise((r) => setTimeout(r, 700));
     try {
       const j = await (await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
       const err = j.error ?? j.result?.error;

@@ -118,7 +118,7 @@ export function Explore({ account }: { account?: string | null }) {
                 </div>
               )}
             </div>
-            <div className="s3">
+            <div className={`s3 ${example && (example.r_bps ?? 0) < 0 ? "lost" : example && example.r_bps === 0 ? "flat" : ""}`}>
               <span className="n"><span>3 · Scored</span><span>real candles</span></span>
               <b>{example ? outcomeText(example.outcome) || "Scored" : "Scored"}</b>
               <p>{!example || (example.r_bps ?? 0) > 0 ? "Winning days release the held half of subscriptions to the trader." : "Losing days: subscribers claim the held half back."}</p>

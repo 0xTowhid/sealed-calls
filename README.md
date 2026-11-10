@@ -6,7 +6,7 @@ Built for NEAR HACKATHON 2026 by Towhid ([@0xTowhid](https://x.com/0xTowhid)). T
 
 | | |
 | --- | --- |
-| Live app | https://0xtowhid.github.io/sealed-calls/ |
+| Live app | https://sealed-calls.vercel.app/ (mirror: https://0xtowhid.github.io/sealed-calls/) |
 | Contract | [`app.to69.testnet`](https://testnet.nearblocks.io/address/app.to69.testnet) (NEAR testnet) |
 | Scoring | OutLayer job on `outlayer.testnet`; wasm URL + sha256 readable from `get_config` |
 | Tracks | Open Innovation (`open`), Privacy & Private AI (`privacy`), Social Money (`social`) |
@@ -28,7 +28,7 @@ What we claim, and only this: calls cannot be edited, deleted or hidden, and bec
 
 You need a NEAR **testnet** wallet ([MyNearWallet](https://testnet.mynearwallet.com) or Meteor) with a little testnet NEAR from [near-faucet.io](https://near-faucet.io).
 
-1. Open https://0xtowhid.github.io/sealed-calls/ → **Explore** shows totals read from the contract (calls posted, traders, subscribers, NEAR paid to traders and returned to subscribers) and a leaderboard of creators.
+1. Open https://sealed-calls.vercel.app/ → **Explore** shows totals read from the contract (calls posted, traders, subscribers, NEAR paid to traders and returned to subscribers) and a leaderboard of creators.
 2. Click a creator → the channel page shows the score, a chart of results call by call, and **Every call**: ended calls with entry, TPs, SL, outcome and result; live calls appear as **Sealed call** with a countdown. Filter with All / Won / Lost / Sealed.
 3. Click **Connect wallet** (top right) and sign in with your testnet account → the top bar shows your account and balance.
 4. On a channel, pick a plan and click **Subscribe** → your wallet asks to send the plan price (+0.05 NEAR storage, mostly refunded). After it confirms, the box says **Your subscription · active until …**.
