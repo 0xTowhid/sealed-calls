@@ -1,7 +1,17 @@
-=== keep  commit 4ef9ee60ccf2d83bdb5cd079e7094ec5c02d1808  Tue Nov 10 02:38:57 UTC 2026
-[02:39:01] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[02:39:04] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           4.773921358790827007407422 NEAR 
-[02:39:07] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
-[02:39:09] period 1 has not ended yet (current 1)
-[02:39:11] period 1 has not ended yet (current 1)
-[02:39:11] keeper done
+=== keep  commit cea314f5528f4e9fe1d514c82aec9c4c6850c9ad  Tue Nov 10 10:59:02 UTC 2026
+[10:59:05] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[10:59:09] keeper: 3 channel(s) on app.to69.testnet; to69.testnet: Native account balance           4.773921358790827007407422 NEAR 
+[10:59:13] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
+[10:59:16] settle channel 1 period 1 (held 0)
+    │    Transaction ID: G2juX93D2zT3EicmDSzZCefz5z4g6JKs7xZPJygY4KCZ
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":1,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+    Function execution return value (printed to stdout):
+[10:59:22]    period 1: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794308358342}
+[10:59:23] period 2 has not ended yet (current 2)
+[10:59:26] settle channel 2 period 1 (held 714285714285714285714)
+    │    Transaction ID: 2F2peFnY5ft4fTDiyixF5QMocWEjSrWsVH9UUw5zTK5r
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":1,"signals":0,"score_bps":0,"released":false,"held":"714285714285714285714"}]}
+    Function execution return value (printed to stdout):
+[10:59:32]    period 1: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"714285714285714285714","settled_at_ms":1794308368081}
+[10:59:32] period 2 has not ended yet (current 2)
+[10:59:32] keeper done
