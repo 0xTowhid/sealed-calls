@@ -1,16 +1,8 @@
-=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Tue Nov 10 23:41:10 UTC 2026
-[23:41:13] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[23:41:16] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.800902550408278907407428 NEAR 
-[23:41:19] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
-[23:41:21] period 2 has not ended yet (current 2)
-[23:41:24] period 2 has not ended yet (current 2)
-[23:41:26] channel 3 signal 7: revealing from drand
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":7,"channel":3,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
-[23:41:31] channel 3: scoring signals [7] on OutLayer
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[7]}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":18317,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":7,"r_bps":0,"outcome":"not_filled"}]}]}
-    signal 7 BTC 0% not_filled
-[23:41:53] period 0 has not ended yet (current 0)
-[23:41:53] keeper done
+=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Wed Nov 11 05:55:21 UTC 2026
+[05:55:25] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[05:55:28] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.798287250890777707407428 NEAR 
+[05:55:31] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
+[05:55:33] period 2 has not ended yet (current 2)
+[05:55:34] period 2 has not ended yet (current 2)
+[05:55:37] period 0 has not ended yet (current 0)
+[05:55:37] keeper done
