@@ -1,8 +1,41 @@
-=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Wed Nov 11 05:55:21 UTC 2026
-[05:55:25] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[05:55:28] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.798287250890777707407428 NEAR 
-[05:55:31] period 0 waits for sealed signal(s): 3 (opens 2026-11-11T06:52Z)
-[05:55:33] period 2 has not ended yet (current 2)
-[05:55:34] period 2 has not ended yet (current 2)
-[05:55:37] period 0 has not ended yet (current 0)
-[05:55:37] keeper done
+=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Wed Nov 11 14:01:50 UTC 2026
+[14:01:53] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[14:01:57] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           3.798287250890777707407428 NEAR 
+[14:01:59] channel 0 signal 3: revealing from drand
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":3,"channel":0,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
+[14:02:04] channel 0: scoring signals [3] on OutLayer
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[3]}]}
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":22932,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/s
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/d62dfdd8eb55521ea99ab3f92707dd02a2baeaa6/scorer.wasm","hash":"0ecece80a929002
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":3,"r_bps":594,"outcome":"expired (5m)"}]}]}
+    signal 3 PONS 5.94% expired (5m)
+[14:03:39] settle channel 0 period 0 (held 10689271990740740740740)
+    │    Transaction ID: 2kJCnv6uh3HPuTZESSmeip24yTT14Bwjto9QsmrxqeDk
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":0,"signals":6,"score_bps":-909,"released":false,"held":"10689271990740740740740"}]}
+    Function execution return value (printed to stdout):
+[14:03:44]    period 0: {"status":"Settled","signals":6,"sum_bps":-10003,"score_bps":-909,"released":false,"held":"10689271990740740740740","settled_at_ms":1794405820441}
+[14:03:46] settle channel 0 period 1 (held 14285714285714285714284)
+    │    Transaction ID: DmpfvN1k8Znds1UZNVP9CSSQz9t3afXDUgx5dyiq5wPd
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":1,"signals":0,"score_bps":0,"released":false,"held":"14285714285714285714284"}]}
+    Function execution return value (printed to stdout):
+[14:03:51]    period 1: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"14285714285714285714284","settled_at_ms":1794405827639}
+[14:03:53] settle channel 0 period 2 (held 14285714285714285714284)
+    │    Transaction ID: DuSiQjbV1kx2iSUrxZj5nBAmVmz4axVZsQNV7ciHbH41
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":2,"signals":0,"score_bps":0,"released":false,"held":"14285714285714285714284"}]}
+    Function execution return value (printed to stdout):
+[14:03:58]    period 2: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"14285714285714285714284","settled_at_ms":1794405834968}
+[14:04:00] period 3 has not ended yet (current 3)
+[14:04:03] settle channel 1 period 2 (held 0)
+    │    Transaction ID: HLabc1LYX1mEXTDu371oAtftNz226Dzqg23QnQbDZE7S
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":2,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+    Function execution return value (printed to stdout):
+[14:04:08]    period 2: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794405844778}
+[14:04:09] period 3 has not ended yet (current 3)
+[14:04:13] settle channel 2 period 2 (held 714285714285714285714)
+    │    Transaction ID: Av2ZyqnRhLAggTgqWLUCSCMBH8EoUyZz9NV1hJ5KLXKM
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":2,"signals":0,"score_bps":0,"released":false,"held":"714285714285714285714"}]}
+    Function execution return value (printed to stdout):
+[14:04:18]    period 2: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"714285714285714285714","settled_at_ms":1794405854514}
+[14:04:19] period 3 has not ended yet (current 3)
+[14:04:22] period 0 has not ended yet (current 0)
+[14:04:22] keeper done
