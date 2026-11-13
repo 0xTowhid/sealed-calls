@@ -164,9 +164,12 @@ floor)  # floor=<usd>: set the DEX liquidity floor in the contract config (no up
   sleep 2; log "liquidity floor now: $(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).liquidity_floor_usd))")"
   ;;
 
-diag)  # diag=<OutLayer request id>: what OutLayer recorded for that execution (read-only)
-  curl -s "https://testnet-api.outlayer.ai/attestations/by-request/$ARG" | head -c 4000; echo
-  curl -s "https://testnet-api.outlayer.ai/public/stats" | head -c 600; echo
+diag)  # diag=<account>: OutLayer logs of that account's latest score_signals transactions (read-only)
+  for H in $(curl -s "https://api-testnet.nearblocks.io/v1/account/$ARG/txns?method=score_signals&per_page=2" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const t of JSON.parse(s).txns||[])console.log(t.transaction_hash)})"); do
+    log "tx $H"
+    curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"EXPERIMENTAL_tx_status\",\"params\":{\"tx_hash\":\"$H\",\"sender_account_id\":\"$MAIN\",\"wait_until\":\"FINAL\"}}" \
+      | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s).result||{};for(const o of r.receipts_outcome||[]){for(const l of o.outcome.logs)console.log(o.outcome.executor_id+': '+l.replace(/\\"code_source\\":\{[^}]*\}\}/,'').slice(0,1500));const st=o.outcome.status;if(st.Failure)console.log('FAILURE',JSON.stringify(st.Failure).slice(0,600))}})"
+  done
   ;;
 
 delete)  # delete=<account> (a sub-account of MAIN); its NEAR goes back to MAIN
