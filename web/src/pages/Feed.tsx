@@ -3,6 +3,7 @@ import { allSignals, call, claimable, getMember, listChannels } from "../near";
 import { useLoad, useNow } from "../data";
 import { costPct, near, price, sig, when } from "../format";
 import { loadMemberKey, memberOpen, newMemberKey, type Opened } from "../crypto";
+import { NEAR } from "../config";
 import { priceOf } from "../markets";
 import { Act, Countdown, LiveLine, MarketLinks, McapAtCall, Outcome, Result, SignalFace, rangeState } from "../ui";
 import type { Channel, Member, Signal } from "../types";
@@ -67,7 +68,7 @@ export function Feed({ account }: { account: string | null }) {
           <div className="notice" key={s.ch.id}>
             <b>Set up this browser to read {s.ch.name}.</b> Signals are encrypted to a key that lives in your browser. Signals posted before you set it up open for you when they open for everyone.
             <div style={{ marginTop: 8 }}>
-              <Act className="btn small" label="Set up this browser" run={async () => { const k = await newMemberKey(s.ch.id, account); await call("register_key", { channel: s.ch.id, pubkey: k.publicKey }); await reload(); }} />
+              <Act className="btn small" label="Set up this browser" run={async () => { const k = await newMemberKey(s.ch.id, account); await call("register_key", { channel: s.ch.id, pubkey: k.publicKey }, NEAR(0.01)); await reload(); }} />
             </div>
           </div>
         ))}
@@ -120,7 +121,11 @@ function FeedCard({ s, name, now, account, opened, live }: { s: Signal; name: st
         {fresh && <div className="tape" />}
         {head}
         <div className="bd">
-          {body ? (
+          {body && typeof opened !== "string" && opened && !opened.matches ? (
+            <div className="notice err" role="alert">
+              <b>Don't trade this.</b> What you decrypted is not the signal locked on-chain (its hash doesn't match the commitment), so it won't be what the public record scores. The creator sent subscribers something different.
+            </div>
+          ) : body ? (
             <>
               <SignalFace b={body} validUntil={opensAt(s)} />
               <McapAtCall b={body} />

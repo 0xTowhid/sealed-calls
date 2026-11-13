@@ -44,7 +44,23 @@ pub const MAX_GAIN_BPS: i32 = 30_000;
 /// Phantom flat signals added to every record: S = Σr / (n + SHRINK).
 pub const SHRINK: i64 = 5;
 const SCORE_CALLBACK_GAS: Gas = Gas::from_tgas(80);
+const PAY_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 const DAY_MS: u64 = 86_400_000;
+/// Nobody can mark a signal unrevealed sooner than this after it ends (time for anyone to reveal it).
+pub const MIN_GRACE_MIN: u32 = 1_440;
+/// Config changes wait this long once channels exist, so everyone sees them coming.
+pub const CONFIG_DELAY_MS: u64 = DAY_MS;
+/// A settlement whose scoring never came back can be restarted after this.
+pub const SETTLE_TIMEOUT_MS: u64 = 15 * 60_000;
+/// Signals a settlement may still have to score itself; more must be scored first (score_signals).
+pub const MAX_SETTLE_SCORE: usize = 10;
+/// Kept from a scoring deposit to pay for the storage the results take (the rest goes to OutLayer).
+pub const SCORE_STORAGE_FEE: NearToken = NearToken::from_millinear(2); // per signal
+pub const SETTLE_STORAGE_FEE: NearToken = NearToken::from_millinear(10);
+/// Smallest plan price: free plans would let anyone fill a channel with throwaway subscribers.
+pub const MIN_PLAN_PRICE: NearToken = NearToken::from_millinear(1);
+/// How many of a channel's newest signals a key change looks through.
+const KEY_ROTATION_SCAN: u32 = 50;
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -276,6 +292,17 @@ pub struct ScoreOut {
     pub ok: bool,
     pub results: Vec<SignalScore>,
     pub error: Option<String>,
+    /// Signals the job could not score this time (data source down, time budget): retried later.
+    #[serde(default)]
+    pub failed: Vec<u64>,
+}
+
+/// A config change waiting for its delay.
+#[near(serializers = [json])]
+#[derive(Debug, Clone)]
+pub struct PendingConfig {
+    pub config: Config,
+    pub eta_ms: u64,
 }
 
 #[ext_contract(ext_outlayer)]
@@ -335,16 +362,103 @@ impl SealedCalls {
         }
     }
 
-    /// The owner can point to a new scorer build (published, hashed) or tune limits. Period length
-    /// cannot change once channels exist.
+    /// Upgrade entry point: keeps all state and sets the config directly (the code upgrade itself is
+    /// the trust step; afterwards every change goes through the delayed `set_config`).
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate(config: Config) -> Self {
+        let mut s: Self = env::state_read().expect("no state to migrate");
+        validate_config(&config);
+        assert_eq!(config.period_minutes, s.config.period_minutes, "period length is fixed");
+        assert_eq!(config.outlayer, s.config.outlayer, "the OutLayer account is fixed");
+        s.config = config;
+        emit("migrated", json!({ "scorer_wasm_hash": s.config.scorer_wasm_hash }));
+        s
+    }
+
+    /// The owner proposes a new config (e.g. a new scorer build). With channels live it takes effect
+    /// only after CONFIG_DELAY_MS, via `apply_config` (anyone). Period length and the OutLayer
+    /// account can never change once channels exist.
     pub fn set_config(&mut self, config: Config) {
         assert_eq!(env::predecessor_account_id(), self.config.owner, "only the owner");
         validate_config(&config);
-        if self.channels.len() > 0 {
-            assert_eq!(config.period_minutes, self.config.period_minutes, "period length is fixed once channels exist");
+        if self.channels.len() == 0 {
+            self.config = config;
+            emit("config_changed", json!({ "scorer_wasm_hash": self.config.scorer_wasm_hash }));
+            return;
         }
-        self.config = config;
+        assert_eq!(config.period_minutes, self.config.period_minutes, "period length is fixed once channels exist");
+        assert_eq!(config.outlayer, self.config.outlayer, "the OutLayer account is fixed once channels exist");
+        let eta_ms = env::block_timestamp_ms() + CONFIG_DELAY_MS;
+        env::storage_write(PENDING_CONFIG, &serde_json::to_vec(&PendingConfig { config: config.clone(), eta_ms }).unwrap());
+        emit("config_proposed", json!({ "config": config, "eta_ms": eta_ms }));
+    }
+
+    /// Anyone applies a proposed config once its delay has passed.
+    pub fn apply_config(&mut self) {
+        let p = self.pending_config().expect("no config change pending");
+        assert!(env::block_timestamp_ms() >= p.eta_ms, "the config change applies from {}", p.eta_ms);
+        env::storage_remove(PENDING_CONFIG);
+        self.config = p.config;
         emit("config_changed", json!({ "scorer_wasm_hash": self.config.scorer_wasm_hash }));
+    }
+
+    pub fn cancel_config(&mut self) {
+        assert_eq!(env::predecessor_account_id(), self.config.owner, "only the owner");
+        env::storage_remove(PENDING_CONFIG);
+        emit("config_cancelled", json!({}));
+    }
+
+    pub fn pending_config(&self) -> Option<PendingConfig> {
+        env::storage_read(PENDING_CONFIG).and_then(|v| serde_json::from_slice(&v).ok())
+    }
+
+    // ---------------------------------------------------------------- storage credit
+    // Late access (`share_signals`) runs without a wallet prompt, so it can't attach a deposit.
+    // Its storage is paid from the creator's prepaid credit — never from subscribers' escrow.
+
+    #[payable]
+    pub fn deposit_storage(&mut self) -> NearToken {
+        let me = env::predecessor_account_id();
+        let start = env::storage_usage();
+        let mut credit = read_u128(&credit_key(&me)) + env::attached_deposit().as_yoctonear();
+        write_u128(&credit_key(&me), credit); // the credit entry itself is paid from the deposit
+        credit = credit.saturating_sub(storage_cost(start));
+        write_u128(&credit_key(&me), credit);
+        NearToken::from_yoctonear(credit)
+    }
+
+    pub fn withdraw_storage(&mut self, amount: Option<NearToken>) -> NearToken {
+        let me = env::predecessor_account_id();
+        let credit = read_u128(&credit_key(&me));
+        let take = amount.map(|a| a.as_yoctonear()).unwrap_or(credit);
+        assert!(take > 0 && take <= credit, "you have {} of storage credit", NearToken::from_yoctonear(credit).exact_amount_display());
+        write_u128(&credit_key(&me), credit - take);
+        Promise::new(me).transfer(NearToken::from_yoctonear(take)).detach();
+        NearToken::from_yoctonear(take)
+    }
+
+    pub fn storage_credit(&self, account: AccountId) -> NearToken {
+        NearToken::from_yoctonear(read_u128(&credit_key(&account)))
+    }
+
+    /// NEAR owed to an account whose payout transfer failed; withdraw with `withdraw_owed`.
+    pub fn owed(&self, account: AccountId) -> NearToken {
+        NearToken::from_yoctonear(read_u128(&owed_key(&account)))
+    }
+
+    pub fn withdraw_owed(&mut self) -> NearToken {
+        let me = env::predecessor_account_id();
+        let amount = read_u128(&owed_key(&me));
+        assert!(amount > 0, "nothing owed");
+        env::storage_remove(&owed_key(&me));
+        self.pay(me, amount);
+        NearToken::from_yoctonear(amount)
+    }
+
+    /// The contract's balance not locked for storage (escrow lives in it).
+    pub fn free_balance(&self) -> NearToken {
+        env::account_balance().saturating_sub(env::storage_byte_cost().saturating_mul(env::storage_usage() as u128))
     }
 
     // ---------------------------------------------------------------- creators
@@ -432,13 +546,16 @@ impl SealedCalls {
         seen.dedup();
         assert_eq!(seen.len(), wrapped_keys.len(), "duplicate wrapped key");
 
-        let day_key = (channel, now / DAY_MS);
-        let today = self.daily.get(&day_key).copied().unwrap_or(0);
+        // The daily limit is per creator across all their channels (more channels ≠ more signals).
+        let day_key = creator_day_key(&creator, now / DAY_MS);
+        let today = read_u128(&day_key) as u32;
         assert!(today < self.config.max_signals_per_day, "daily signal limit reached");
-        self.daily.insert(day_key, today + 1);
+        write_u128(&day_key, today as u128 + 1);
 
         let id = self.signals.len() as u64;
-        let period = self.period_of(&c, now);
+        // A signal counts in the period in which it ends, so a long signal never holds up the
+        // settlement (and refunds) of the periods before its end.
+        let period = self.period_of(&c, now + valid_min as u64 * 60_000);
         self.signals.push(Signal {
             id,
             channel,
@@ -479,11 +596,12 @@ impl SealedCalls {
     /// Late access: the creator wraps still-sealed signals to subscribers who joined (or set up a
     /// browser) after posting. Only the creator, only while a signal is sealed and still valid, only
     /// to active subscribers with a key; a member who already has a wrapped key is skipped. No
-    /// deposit (so a wallet's function-call key can do it in the background): the contract pays
-    /// the small storage. Returns how many keys were added.
+    /// deposit (so a wallet's function-call key can do it in the background): the storage is paid
+    /// from the creator's prepaid storage credit (`deposit_storage`). Returns how many keys were added.
     pub fn share_signals(&mut self, items: Vec<(u64, Vec<WrappedKey>)>) -> u32 {
         let me = env::predecessor_account_id();
         let now = env::block_timestamp_ms();
+        let start = env::storage_usage();
         assert!(items.len() <= 20, "at most 20 signals per call");
         let mut added = 0u32;
         for (id, keys) in items {
@@ -514,6 +632,12 @@ impl SealedCalls {
                 emit("signal_shared", json!({ "signal": id, "channel": channel, "members": new_members }));
             }
         }
+        self.signals.flush();
+        let cost = storage_cost(start);
+        let credit = read_u128(&credit_key(&me));
+        assert!(credit >= cost, "storage credit too low: sharing needs {}, you have {} (deposit_storage)",
+            NearToken::from_yoctonear(cost).exact_amount_display(), NearToken::from_yoctonear(credit).exact_amount_display());
+        write_u128(&credit_key(&me), credit - cost);
         added
     }
 
@@ -522,14 +646,22 @@ impl SealedCalls {
     /// Subscribe (or extend) with one of the channel's plans. Attach the plan price plus about
     /// 0.02 NEAR for storage; the rest is refunded. Half the price goes to the creator now, half is
     /// held and released period by period only if the creator's record is positive.
+    /// `expect_days` / `max_price` guard against the creator changing the plan while the
+    /// transaction is on its way (the app always passes both).
     #[payable]
-    pub fn subscribe(&mut self, channel: u32, plan: u32) -> u64 {
+    pub fn subscribe(&mut self, channel: u32, plan: u32, expect_days: Option<u32>, max_price: Option<NearToken>) -> u64 {
         let start = env::storage_usage();
         let me = env::predecessor_account_id();
         let now = env::block_timestamp_ms();
         let c = self.channels.get(channel).expect("no such channel").clone();
         let p = c.plans.get(plan as usize).expect("no such plan").clone();
         assert_ne!(me, c.creator, "creators don't subscribe to their own channel");
+        if let Some(d) = expect_days {
+            assert_eq!(p.days, d, "this plan changed: it is now {} days", p.days);
+        }
+        if let Some(mp) = max_price {
+            assert!(p.price <= mp, "this plan changed: it now costs {}", p.price.exact_amount_display());
+        }
 
         let mut m = self.members.get(&(channel, me.clone())).cloned().unwrap_or(Member { until_ms: 0, pubkey: None, subs: vec![] });
         let was_active = m.until_ms > now;
@@ -580,7 +712,7 @@ impl SealedCalls {
         let deposit = env::attached_deposit().as_yoctonear();
         assert!(deposit >= need, "attach at least {} (price + storage)", NearToken::from_yoctonear(need).exact_amount_display());
         if to_creator > 0 {
-            Promise::new(c.creator.clone()).transfer(NearToken::from_yoctonear(to_creator)).detach();
+            self.pay(c.creator.clone(), to_creator);
         }
         refund_rest(&me, NearToken::from_yoctonear(deposit - need));
         emit("subscribed", json!({
@@ -592,26 +724,75 @@ impl SealedCalls {
     }
 
     /// A subscriber registers (or rotates) their X25519 public key for a channel. Signals posted
-    /// afterwards are wrapped to it.
+    /// afterwards are wrapped to it. On a rotation, the member's old wrapped keys on still-live
+    /// signals are dropped so the creator's app shares those signals again to the new key.
+    /// Attach about 0.01 NEAR for storage; the rest is refunded.
+    #[payable]
     pub fn register_key(&mut self, channel: u32, pubkey: String) {
-        assert!(pubkey.len() == 44 && pubkey.ends_with('='), "pubkey must be a base64 32-byte X25519 key");
+        assert!(valid_x25519(&pubkey), "pubkey must be a base64 32-byte X25519 public key");
+        let start = env::storage_usage();
         let me = env::predecessor_account_id();
+        let now = env::block_timestamp_ms();
         let m = self.members.get_mut(&(channel, me.clone())).expect("not subscribed to this channel");
+        let rotated = m.pubkey.as_ref().is_some_and(|k| *k != pubkey);
         m.pubkey = Some(pubkey);
-        emit("key_registered", json!({ "channel": channel, "member": me }));
+        if rotated {
+            let count = self.channels.get(channel).map(|c| c.signal_count).unwrap_or(0);
+            for i in (count.saturating_sub(KEY_ROTATION_SCAN)..count).rev() {
+                let Some(id) = self.channel_signals.get(&(channel, i)).copied() else { continue };
+                let s = self.signals.get(id as u32).unwrap();
+                if s.status != SignalStatus::Sealed || opens_at(s) <= now || !s.wrapped_keys.iter().any(|w| w.member == me) {
+                    continue;
+                }
+                self.signals.get_mut(id as u32).unwrap().wrapped_keys.retain(|w| w.member != me);
+            }
+        }
+        self.flush_all();
+        refund_rest(&me, charge_storage_or_free(start, env::attached_deposit()));
+        emit("key_registered", json!({ "channel": channel, "member": me, "rotated": rotated }));
     }
 
-    /// Claim back held halves of settled periods that were not released to the creator.
+    /// Claim back held halves of settled periods that were not released to the creator. The small
+    /// storage this record takes is deducted from the refund.
     pub fn claim_refund(&mut self, channel: u32) -> NearToken {
         let me = env::predecessor_account_id();
+        let start = env::storage_usage();
         let (amount, periods) = self.claimable(channel, me.clone());
         assert!(amount.as_yoctonear() > 0, "nothing to claim");
         for p in &periods {
             self.claimed.insert((channel, *p, me.clone()), true);
         }
-        emit("refund_claimed", json!({ "channel": channel, "member": me, "amount": amount, "periods": periods }));
-        Promise::new(me).transfer(amount).detach();
-        amount
+        self.claimed.flush();
+        let fee = storage_cost(start);
+        assert!(amount.as_yoctonear() > fee, "refund is smaller than the storage it needs");
+        let net = amount.as_yoctonear() - fee;
+        emit("refund_claimed", json!({ "channel": channel, "member": me, "amount": NearToken::from_yoctonear(net), "periods": periods }));
+        Promise::new(me.clone())
+            .transfer(NearToken::from_yoctonear(net))
+            .then(Self::ext(env::current_account_id()).with_static_gas(PAY_CALLBACK_GAS).on_refund_paid(channel, me, periods))
+            .detach();
+        NearToken::from_yoctonear(net)
+    }
+
+    /// A refund transfer that failed is claimable again.
+    #[private]
+    pub fn on_refund_paid(&mut self, channel: u32, member: AccountId, periods: Vec<u64>, #[callback_result] r: Result<(), PromiseError>) {
+        if r.is_err() {
+            for p in &periods {
+                self.claimed.remove(&(channel, *p, member.clone()));
+            }
+            emit("refund_failed", json!({ "channel": channel, "member": member, "periods": periods }));
+        }
+    }
+
+    /// A payout transfer that failed is kept for the account to withdraw (`withdraw_owed`).
+    #[private]
+    pub fn on_paid(&mut self, account: AccountId, amount: NearToken, #[callback_result] r: Result<(), PromiseError>) {
+        if r.is_err() {
+            let k = owed_key(&account);
+            write_u128(&k, read_u128(&k) + amount.as_yoctonear());
+            emit("payout_failed", json!({ "account": account, "amount": amount }));
+        }
     }
 
     // ---------------------------------------------------------------- anyone
@@ -619,7 +800,10 @@ impl SealedCalls {
     /// Publish a signal after its validity. Anyone can do it: from the drand-opened copy, or a
     /// subscriber from their own decrypted copy. Only the exact committed text is accepted. If that
     /// text is not a valid signal for this channel, it is published and scores −100%.
+    /// Attach about 0.01 NEAR for the storage the published signal takes; the rest is refunded.
+    #[payable]
     pub fn reveal(&mut self, signal_id: u64, plaintext: String) {
+        let start = env::storage_usage();
         let now = env::block_timestamp_ms();
         let s = self.signals.get_mut(signal_id as u32).expect("no such signal");
         assert_eq!(s.status, SignalStatus::Sealed, "signal is not sealed");
@@ -649,10 +833,14 @@ impl SealedCalls {
             "signal": signal_id, "channel": s.channel, "creator": s.creator,
             "valid": s.body.is_some(), "by": env::predecessor_account_id(),
         }));
+        self.signals.flush();
+        refund_rest(&env::predecessor_account_id(), charge_storage_or_free(start, env::attached_deposit()));
     }
 
-    /// After the grace period a signal nobody revealed is final and scores −100%.
+    /// After the grace period (at least 24 h) a signal nobody revealed is final and scores −100%.
+    #[payable]
     pub fn mark_unrevealed(&mut self, signal_id: u64) {
+        let start = env::storage_usage();
         let now = env::block_timestamp_ms();
         let grace_ms = self.config.grace_min as u64 * 60_000;
         let s = self.signals.get_mut(signal_id as u32).expect("no such signal");
@@ -662,19 +850,28 @@ impl SealedCalls {
         s.r_bps = Some(LOSS_BPS);
         s.outcome = Some("unrevealed".into());
         emit("signal_unrevealed", json!({ "signal": signal_id, "channel": s.channel, "creator": s.creator }));
+        self.signals.flush();
+        refund_rest(&env::predecessor_account_id(), charge_storage_or_free(start, env::attached_deposit()));
     }
 
-    /// Settle a channel's next period once it has ended and every signal posted in it is open.
-    /// Scoring runs on OutLayer; attach its compute deposit (unused part is refunded by OutLayer).
-    /// A period with nothing to score settles at once and any deposit is returned.
+    /// Settle a channel's next period once it has ended and every signal in it is open.
+    /// Scoring of any still-unscored signals (at most MAX_SETTLE_SCORE; score the rest first with
+    /// `score_signals`) runs on OutLayer: attach its compute deposit (SETTLE_STORAGE_FEE is kept for
+    /// storage, the unused rest is refunded by OutLayer). A period with nothing to score settles at
+    /// once; its storage is paid from the deposit and the rest returned. A settlement whose scoring
+    /// never came back can be restarted after SETTLE_TIMEOUT_MS.
     #[payable]
     pub fn settle(&mut self, channel: u32) -> PromiseOrValue<Option<PeriodResult>> {
+        let start = env::storage_usage();
         let now = env::block_timestamp_ms();
         let c = self.channels.get(channel).expect("no such channel").clone();
         let period = c.next_period;
         assert!(now >= self.period_end(&c, period), "period {period} has not ended");
         if let Some(r) = self.periods.get(&(channel, period)) {
-            assert!(r.status != PeriodStatus::Settling, "period {period} is being settled");
+            assert!(
+                r.status != PeriodStatus::Settling || now >= r.settled_at_ms + SETTLE_TIMEOUT_MS,
+                "period {period} is being settled"
+            );
         }
         let ids = self.period_signals.get(&(channel, period)).cloned().unwrap_or_default();
         for id in &ids {
@@ -683,25 +880,28 @@ impl SealedCalls {
         let to_score: Vec<u64> = ids.iter().copied().filter(|id| self.signals.get(*id as u32).unwrap().r_bps.is_none()).collect();
         let deposit = env::attached_deposit();
         if to_score.is_empty() {
-            refund_rest(&env::predecessor_account_id(), deposit);
-            return PromiseOrValue::Value(Some(self.finish_period(channel, period)));
+            let result = self.finish_period(channel, period);
+            self.periods.flush();
+            refund_rest(&env::predecessor_account_id(), charge_storage_or_free(start, deposit));
+            return PromiseOrValue::Value(Some(result));
         }
-        assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
+        assert!(to_score.len() <= MAX_SETTLE_SCORE, "{} signals are unscored: score them first with score_signals (10 per call)", to_score.len());
+        assert!(deposit > SETTLE_STORAGE_FEE, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
         self.periods.insert(
             (channel, period),
-            PeriodResult { status: PeriodStatus::Settling, signals: 0, sum_bps: 0, score_bps: 0, released: false, held: NearToken::from_yoctonear(0), settled_at_ms: 0 },
+            PeriodResult { status: PeriodStatus::Settling, signals: 0, sum_bps: 0, score_bps: 0, released: false, held: NearToken::from_yoctonear(0), settled_at_ms: now },
         );
         emit("settle_requested", json!({ "channel": channel, "period": period, "signals": to_score }));
         PromiseOrValue::Promise(
-            self.scoring_request(&to_score, deposit)
-                .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_scores(channel, period, to_score)),
+            self.scoring_request(&to_score, deposit.saturating_sub(SETTLE_STORAGE_FEE))
+                .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_scores(channel, period, to_score, now)),
         )
     }
 
     /// Official scores as soon as signals end, without waiting for the period to settle.
     /// Anyone can call it (the keeper does) with up to 10 revealed, ended, unscored signals and a
-    /// deposit for OutLayer compute (unused part refunded by OutLayer). Settlement later uses these
-    /// scores as they are.
+    /// deposit for OutLayer compute (SCORE_STORAGE_FEE per signal is kept for storage; the unused
+    /// rest is refunded by OutLayer). Settlement later uses these scores as they are.
     #[payable]
     pub fn score_signals(&mut self, ids: Vec<u64>) -> Promise {
         assert!(!ids.is_empty() && ids.len() <= 10, "1 to 10 signals per call");
@@ -717,16 +917,17 @@ impl SealedCalls {
             assert!(now >= opens_at(s), "signal {id} is still valid");
         }
         let deposit = env::attached_deposit();
-        assert!(deposit.as_yoctonear() > 0, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
+        let fee = SCORE_STORAGE_FEE.saturating_mul(ids.len() as u128);
+        assert!(deposit > fee, "attach a deposit for OutLayer compute (0.1–0.5 NEAR; unused part is refunded)");
         emit("scoring_requested", json!({ "signals": ids }));
-        self.scoring_request(&ids, deposit)
+        self.scoring_request(&ids, deposit.saturating_sub(fee))
             .then(Self::ext(env::current_account_id()).with_static_gas(SCORE_CALLBACK_GAS).on_signal_scores(ids))
     }
 
     #[private]
     pub fn on_signal_scores(&mut self, ids: Vec<u64>, #[callback_result] result: Result<Option<ScoreOut>, PromiseError>) -> u32 {
         let out = match result {
-            Ok(Some(o)) if o.ok && check_scores(&ids, &o.results).is_ok() => o,
+            Ok(Some(o)) if o.ok && check_scores(&ids, &o.results, &o.failed).is_ok() => o,
             other => {
                 let why = match other {
                     Ok(Some(o)) => o.error.unwrap_or_else(|| "scores did not match the request".into()),
@@ -737,16 +938,10 @@ impl SealedCalls {
                 return 0;
             }
         };
-        let mut n = 0;
-        for r in &out.results {
-            let s = self.signals.get_mut(r.id as u32).unwrap();
-            if s.r_bps.is_some() {
-                continue; // a settlement scored it meanwhile
-            }
-            apply_score(s, r);
-            n += 1;
+        let n = self.apply_scores(&out.results);
+        if !out.failed.is_empty() {
+            emit("scoring_failed", json!({ "signals": out.failed, "reason": out.error.unwrap_or_else(|| "data unavailable; retry later".into()) }));
         }
-        emit("signals_scored", json!({ "signals": out.results.iter().map(|r| json!({ "id": r.id, "r_bps": r.r_bps, "outcome": r.outcome })).collect::<Vec<_>>() }));
         n
     }
 
@@ -756,31 +951,36 @@ impl SealedCalls {
         channel: u32,
         period: u64,
         ids: Vec<u64>,
+        requested_ms: u64,
         #[callback_result] result: Result<Option<ScoreOut>, PromiseError>,
     ) -> Option<PeriodResult> {
+        // Only the settlement that is still current may finish the period (a timed-out one that
+        // answers late just leaves its scores).
+        let current = self.periods.get(&(channel, period)).is_some_and(|r| r.status == PeriodStatus::Settling && r.settled_at_ms == requested_ms)
+            && self.channels.get(channel).is_some_and(|c| c.next_period == period);
         let out = match result {
-            Ok(Some(o)) if o.ok => o,
+            Ok(Some(o)) if o.ok && check_scores(&ids, &o.results, &o.failed).is_ok() => o,
             other => {
                 let why = match other {
-                    Ok(Some(o)) => o.error.unwrap_or_else(|| "scorer reported failure".into()),
+                    Ok(Some(o)) => o.error.unwrap_or_else(|| "scores did not match the request".into()),
                     Ok(None) => "scoring job failed or returned nothing".into(),
                     Err(_) => "OutLayer request failed".into(),
                 };
-                self.periods.remove(&(channel, period));
+                if current {
+                    self.periods.remove(&(channel, period));
+                }
                 emit("settle_failed", json!({ "channel": channel, "period": period, "reason": why }));
                 return None; // anyone can call settle again
             }
         };
-        if let Err(why) = check_scores(&ids, &out.results) {
-            self.periods.remove(&(channel, period));
-            emit("settle_failed", json!({ "channel": channel, "period": period, "reason": why }));
+        self.apply_scores(&out.results);
+        if !current {
             return None;
         }
-        for r in &out.results {
-            let s = self.signals.get_mut(r.id as u32).unwrap();
-            if s.r_bps.is_none() {
-                apply_score(s, r);
-            }
+        if !out.failed.is_empty() {
+            self.periods.remove(&(channel, period));
+            emit("settle_failed", json!({ "channel": channel, "period": period, "reason": "some signals could not be scored yet", "signals": out.failed }));
+            return None;
         }
         Some(self.finish_period(channel, period))
     }
@@ -989,18 +1189,45 @@ impl SealedCalls {
             .collect()
     }
 
+    fn apply_scores(&mut self, results: &[SignalScore]) -> u32 {
+        let mut n = 0;
+        for r in results {
+            let s = self.signals.get_mut(r.id as u32).unwrap();
+            if s.r_bps.is_some() {
+                continue; // scored meanwhile by another request
+            }
+            apply_score(s, r);
+            n += 1;
+        }
+        if n > 0 {
+            emit("signals_scored", json!({ "signals": results.iter().map(|r| json!({ "id": r.id, "r_bps": r.r_bps, "outcome": r.outcome })).collect::<Vec<_>>() }));
+        }
+        n
+    }
+
+    /// Sends NEAR; if the transfer fails, the amount is kept as owed to that account.
+    fn pay(&self, to: AccountId, amount: u128) {
+        Promise::new(to.clone())
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(Self::ext(env::current_account_id()).with_static_gas(PAY_CALLBACK_GAS).on_paid(to, NearToken::from_yoctonear(amount)))
+            .detach();
+    }
+
     fn finish_period(&mut self, channel: u32, period: u64) -> PeriodResult {
         let ids = self.period_signals.get(&(channel, period)).cloned().unwrap_or_default();
-        let rs: Vec<i32> = ids.iter().map(|id| self.signals.get(*id as u32).unwrap().r_bps.unwrap_or(LOSS_BPS)).collect();
-        let filled = ids
-            .iter()
-            .filter(|id| {
-                let o = self.signals.get(**id as u32).unwrap().outcome.clone().unwrap_or_default();
-                !matches!(o.as_str(), "not_filled" | "invalid" | "unrevealed" | "below_floor" | "no_market")
-            })
-            .count() as u32;
+        let mut rs: Vec<i32> = vec![];
+        let mut filled = 0u32;
+        for id in &ids {
+            let s = self.signals.get(*id as u32).unwrap();
+            rs.push(s.r_bps.unwrap_or(LOSS_BPS));
+            if was_filled(s.outcome.as_deref().unwrap_or("")) {
+                filled += 1;
+            }
+        }
         let (sum, score) = period_score(&rs);
-        let released = rs.len() as u32 >= self.config.min_signals && score > 0;
+        // Released only on a positive total (Σr > 0, not the rounded score) over at least
+        // `min_signals` calls that actually filled (calls that never fill can't pad the count).
+        let released = filled >= self.config.min_signals && sum > 0;
         let held = self.partial.get(&(channel, period)).copied().unwrap_or(0);
         let diff = self.diff.get(&(channel, period)).copied().unwrap_or(0);
         let c = self.channels.get_mut(channel).unwrap();
@@ -1015,7 +1242,8 @@ impl SealedCalls {
             c.stats.periods_released += 1;
             c.stats.earned = c.stats.earned.saturating_add(held);
             if held.as_yoctonear() > 0 {
-                Promise::new(c.creator.clone()).transfer(held).detach();
+                let creator = c.creator.clone();
+                self.pay(creator, held.as_yoctonear());
             }
         } else {
             c.stats.periods_refunded += 1;
@@ -1047,16 +1275,26 @@ pub fn period_score(rs: &[i32]) -> (i64, i64) {
     (sum, sum / (rs.len() as i64 + SHRINK))
 }
 
-pub fn check_scores(ids: &[u64], results: &[SignalScore]) -> Result<(), String> {
-    if results.len() != ids.len() {
-        return Err(format!("expected {} scores, got {}", ids.len(), results.len()));
+/// Every requested signal appears exactly once, either scored or reported as failed.
+pub fn check_scores(ids: &[u64], results: &[SignalScore], failed: &[u64]) -> Result<(), String> {
+    if results.len() + failed.len() != ids.len() {
+        return Err(format!("expected {} scores, got {} (+{} failed)", ids.len(), results.len(), failed.len()));
     }
     for id in ids {
-        if results.iter().filter(|s| s.id == *id).count() != 1 {
+        if results.iter().filter(|s| s.id == *id).count() + failed.iter().filter(|f| *f == id).count() != 1 {
             return Err(format!("signal {id} missing or repeated in scores"));
         }
     }
     Ok(())
+}
+
+/// Outcomes in which the entry never filled (or there was nothing to trade). The scorer may append
+/// the candle size, e.g. "not_filled (15m)", so only the first word counts.
+pub const NO_FILL: &[&str] = &["not_filled", "invalid", "unrevealed", "below_floor", "no_market", "no_pool_at_post", "no_data", "no_trades"];
+
+pub fn was_filled(outcome: &str) -> bool {
+    let first = outcome.split(' ').next().unwrap_or("");
+    !first.is_empty() && !NO_FILL.contains(&first)
 }
 
 /// The drand round must open no earlier than validity's end and at most ROUND_SLACK_S after.
@@ -1162,6 +1400,7 @@ fn validate_config(c: &Config) {
     assert!(c.period_minutes >= 10, "period too short");
     assert!(c.max_signals_per_day >= 1 && c.max_signals_per_day <= 50, "max_signals_per_day 1..=50");
     assert!(c.min_signals >= 1, "min_signals >= 1");
+    assert!(c.grace_min >= MIN_GRACE_MIN, "grace_min must be at least {MIN_GRACE_MIN} minutes");
     assert!(c.scorer_wasm_url.starts_with("https://"), "scorer_wasm_url must be https");
     assert!(is_hex64(&c.scorer_wasm_hash), "scorer_wasm_hash must be 64 lowercase hex chars");
 }
@@ -1172,6 +1411,7 @@ fn validate_channel(name: &str, about: &str, plans: &[Plan], max_members: u32, p
     assert!(!plans.is_empty() && plans.len() <= MAX_PLANS, "1..={MAX_PLANS} plans");
     for p in plans {
         assert!((1..=MAX_PLAN_DAYS).contains(&p.days), "plan days must be 1..={MAX_PLAN_DAYS}");
+        assert!(p.price >= MIN_PLAN_PRICE, "plan price must be at least {}", MIN_PLAN_PRICE.exact_amount_display());
     }
     let _ = period_minutes;
     assert!((1..=MAX_MEMBERS).contains(&max_members), "max subscribers 1..={MAX_MEMBERS}");
@@ -1249,4 +1489,51 @@ fn write_tags(channel: u32, tags: &[String]) {
 
 fn read_tags(channel: u32) -> Vec<String> {
     env::storage_read(&tag_key(channel)).and_then(|v| serde_json::from_slice(&v).ok()).unwrap_or_default()
+}
+
+// ------------------------------------------------------------- raw-key state (no struct change)
+const PENDING_CONFIG: &[u8] = b"pending_config";
+
+fn credit_key(a: &AccountId) -> Vec<u8> {
+    [b"scred:".as_slice(), a.as_bytes()].concat()
+}
+fn owed_key(a: &AccountId) -> Vec<u8> {
+    [b"owed:".as_slice(), a.as_bytes()].concat()
+}
+fn creator_day_key(a: &AccountId, day: u64) -> Vec<u8> {
+    [b"cday:".as_slice(), a.as_bytes(), b":", &day.to_le_bytes()].concat()
+}
+fn read_u128(k: &[u8]) -> u128 {
+    env::storage_read(k).and_then(|v| v.try_into().ok()).map(u128::from_le_bytes).unwrap_or(0)
+}
+fn write_u128(k: &[u8], v: u128) {
+    if v == 0 {
+        env::storage_remove(k);
+    } else {
+        env::storage_write(k, &v.to_le_bytes());
+    }
+}
+
+/// X25519 public keys that make every shared secret predictable (libsodium refuses them too).
+const SMALL_ORDER: [[u8; 32]; 7] = [
+    [0; 32],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a, 0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00],
+    [0x5f, 0x9c, 0x95, 0xbc, 0xa3, 0x50, 0x8c, 0x24, 0xb1, 0xd0, 0xb1, 0x55, 0x9c, 0x83, 0xef, 0x5b, 0x04, 0x44, 0x5c, 0xc4, 0x58, 0x1c, 0x8e, 0x86, 0xd8, 0x22, 0x4e, 0xdd, 0xd0, 0x9f, 0x11, 0x57],
+    [0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
+    [0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
+    [0xee, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
+];
+
+/// Standard base64 of 32 bytes that is not a small-order point (top bit ignored, as X25519 does).
+pub fn valid_x25519(s: &str) -> bool {
+    use near_sdk::base64::{engine::general_purpose::STANDARD, Engine};
+    let Ok(b) = STANDARD.decode(s) else { return false };
+    let Ok(mut k): Result<[u8; 32], _> = b.try_into() else { return false };
+    k[31] &= 0x7f;
+    !SMALL_ORDER.iter().any(|z| {
+        let mut z = *z;
+        z[31] &= 0x7f;
+        z == k
+    })
 }

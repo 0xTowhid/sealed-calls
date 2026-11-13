@@ -52,6 +52,9 @@ export const currentPeriod = (channel: number) => view<number>("current_period",
 export const getPeriod = (channel: number, period: number) => view<PeriodResult | null>("get_period", { channel, period });
 export const periodHeld = (channel: number, period: number) => view<string>("period_held", { channel, period });
 export const claimable = (channel: number, account: string) => view<[string, number[]]>("claimable", { channel, account });
+export const storageCredit = (account: string) => view<string>("storage_credit", { account }).catch(() => "0");
+export const owedTo = (account: string) => view<string>("owed", { account }).catch(() => "0");
+export const pendingConfig = () => view<{ config: Config; eta_ms: number } | null>("pending_config").catch(() => null);
 
 /** Every signal in a channel, newest first (the contract pages by 100). */
 export async function allSignals(channel: number, total: number): Promise<Signal[]> {

@@ -45,7 +45,9 @@ export async function seal(p: { channel: number; creator: string; validMin: numb
   const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
   const box = sodium.crypto_secretbox_easy(sodium.from_string(plaintext), nonce, key);
   const member_ct = b64(new Uint8Array([...nonce, ...box]));
-  const wrapped_keys = p.readers.map((r) => ({ member: r.member, key: b64(sodium.crypto_box_seal(key, unb64(r.pubkey))) }));
+  // A reader whose registered key is unusable gets a placeholder (they can't open it); one bad key
+  // must never stop the creator from posting.
+  const wrapped_keys = p.readers.map((r) => ({ member: r.member, key: sealTo(key, r.pubkey) }));
   return { args: { channel: p.channel, valid_min: p.validMin, commit, reveal_round, tlock_ct, member_ct, wrapped_keys }, plaintext };
 }
 
@@ -143,7 +145,15 @@ export async function openWithKey(s: Signal, key: Uint8Array): Promise<Opened | 
   }
 }
 
+function sealTo(key: Uint8Array, pubkey: string) {
+  try {
+    return b64(sodium.crypto_box_seal(key, unb64(pubkey)));
+  } catch {
+    return "unusable-key";
+  }
+}
+
 export async function wrapFor(key: Uint8Array, pubkey: string) {
   await sodium.ready;
-  return b64(sodium.crypto_box_seal(key, unb64(pubkey)));
+  return sealTo(key, pubkey);
 }

@@ -4,8 +4,8 @@ use near_sdk::testing_env;
 
 const T0_MS: u64 = 1_762_560_000_000; // 2025-11-08
 const WEEK_MS: u64 = 7 * DAY_MS;
-const PK_A: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-const PK_B: &str = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=";
+const PK_A: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
+const PK_B: &str = "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=";
 
 fn acc(s: &str) -> AccountId {
     s.parse().unwrap()
@@ -28,7 +28,7 @@ fn config() -> Config {
     Config {
         owner: acc("owner.testnet"),
         period_minutes: 10_080,
-        grace_min: 60,
+        grace_min: 1_440,
         min_signals: 1,
         max_signals_per_day: 5,
         scorer_wasm_url: "https://example.com/scorer.wasm".into(),
@@ -75,10 +75,10 @@ fn setup() -> SealedCalls {
     ctx("alice.testnet", T0_MS, near(1));
     c.create_channel("Alice Alpha".into(), "ETH and majors".into(), plans(), 25, None);
     ctx("m1.testnet", T0_MS + 1000, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
     c.register_key(0, PK_A.into());
     ctx("m2.testnet", T0_MS + 2000, near(4));
-    c.subscribe(0, 1);
+    c.subscribe(0, 1, None, None);
     c
 }
 
@@ -102,7 +102,7 @@ fn score(id: u64, r: i32, outcome: &str) -> SignalScore {
 }
 
 fn ok(results: Vec<SignalScore>) -> Result<Option<ScoreOut>, PromiseError> {
-    Ok(Some(ScoreOut { ok: true, results, error: None }))
+    Ok(Some(ScoreOut { ok: true, results, error: None, failed: vec![] }))
 }
 
 fn logs_have(event: &str) -> bool {
@@ -138,7 +138,7 @@ fn subscription_pays_half_now_and_holds_half() {
 fn long_subscription_spreads_evenly_over_full_periods() {
     let mut c = setup();
     ctx("m3.testnet", T0_MS, near(7)); // exactly at a period boundary: 30 days = 4 full weeks + 2 days
-    c.subscribe(0, 2);
+    c.subscribe(0, 2, None, None);
     let m3 = c.get_member(0, acc("m3.testnet")).unwrap();
     let held = m3.subs[0].held.as_yoctonear();
     assert_eq!(held, near(3));
@@ -155,7 +155,7 @@ fn long_subscription_spreads_evenly_over_full_periods() {
 fn extending_starts_after_the_current_subscription() {
     let mut c = setup();
     ctx("m1.testnet", T0_MS + DAY_MS, near(3));
-    let until = c.subscribe(0, 0);
+    let until = c.subscribe(0, 0, None, None);
     assert_eq!(until, T0_MS + 1000 + 2 * WEEK_MS);
     assert_eq!(c.get_member(0, acc("m1.testnet")).unwrap().subs.len(), 2);
 }
@@ -165,7 +165,7 @@ fn extending_starts_after_the_current_subscription() {
 fn subscribing_needs_the_full_price() {
     let mut c = setup();
     ctx("m3.testnet", T0_MS, near(1));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
 }
 
 #[test]
@@ -176,9 +176,9 @@ fn channel_cap_counts_active_subscribers() {
     ctx("alice.testnet", T0_MS, near(1));
     c.create_channel("Tiny".into(), "".into(), plans(), 1, None);
     ctx("m1.testnet", T0_MS, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
     ctx("m2.testnet", T0_MS, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
 }
 
 #[test]
@@ -188,9 +188,9 @@ fn expired_seat_frees_up() {
     ctx("alice.testnet", T0_MS, near(1));
     c.create_channel("Tiny".into(), "".into(), plans(), 1, None);
     ctx("m1.testnet", T0_MS, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
     ctx("m2.testnet", T0_MS + WEEK_MS + 1, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
     assert_eq!(c.subscribers(0).len(), 1);
 }
 
@@ -210,7 +210,7 @@ fn signal_goes_to_active_subscribers_with_a_key() {
 #[should_panic(expected = "wrap the signal key to every active subscriber")]
 fn signal_must_reach_every_reader() {
     let mut c = setup();
-    ctx("m2.testnet", T0_MS, 0);
+    ctx("m2.testnet", T0_MS, near(1) / 10);
     c.register_key(0, PK_B.into());
     post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
 }
@@ -260,7 +260,7 @@ fn daily_limit() {
 fn no_reveal_before_validity_ends() {
     let mut c = setup();
     let (id, p) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 10_000 + 239 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + 239 * 60_000, near(1) / 10);
     c.reveal(id, p);
 }
 
@@ -269,7 +269,7 @@ fn no_reveal_before_validity_ends() {
 fn reveal_needs_the_committed_text() {
     let mut c = setup();
     let (id, p) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, near(1) / 10);
     c.reveal(id, p.replace("3200", "3300"));
 }
 
@@ -277,7 +277,7 @@ fn reveal_needs_the_committed_text() {
 fn reveal_publishes_the_signal() {
     let mut c = setup();
     let (id, p) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, near(1) / 10);
     c.reveal(id, p);
     let s = c.get_signal(id).unwrap();
     let b = s.body.unwrap();
@@ -294,7 +294,7 @@ fn invalid_committed_signal_scores_minus_100() {
     // Stop loss above the entry on a long: committed, so it is published, but it scores −100%.
     let bad = body_json("long", 5, "3000", "3050", &["3200"], "3100");
     let (id, p) = post(&mut c, T0_MS + 10_000, 60, &bad, "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + 60 * 60_000, near(1) / 10);
     c.reveal(id, p);
     let s = c.get_signal(id).unwrap();
     assert!(s.body.is_none());
@@ -306,7 +306,9 @@ fn invalid_committed_signal_scores_minus_100() {
 fn unrevealed_after_grace_scores_minus_100() {
     let mut c = setup();
     let (id, _) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 10_000 + 120 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + (60 + 1_440) * 60_000 - 1, near(1) / 10);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let mut c2 = setup(); c2.mark_unrevealed(0) })).is_err());
+    ctx("anyone.testnet", T0_MS + 10_000 + (60 + 1_440) * 60_000, near(1) / 10);
     c.mark_unrevealed(id);
     assert_eq!(c.get_signal(id).unwrap().r_bps, Some(LOSS_BPS));
 }
@@ -345,7 +347,7 @@ fn body_rules() {
 #[should_panic(expected = "period 0 has not ended")]
 fn period_must_end_before_settling() {
     let mut c = setup();
-    ctx("anyone.testnet", T0_MS + WEEK_MS - 1, 0);
+    ctx("anyone.testnet", T0_MS + WEEK_MS - 1, near(1) / 10);
     c.settle(0);
 }
 
@@ -353,7 +355,7 @@ fn period_must_end_before_settling() {
 #[should_panic(expected = "is still sealed")]
 fn sealed_signal_blocks_settlement() {
     let mut c = setup();
-    post(&mut c, T0_MS + WEEK_MS - 60 * 60_000, 240, &good_long(), "s1", m1_key());
+    post(&mut c, T0_MS + WEEK_MS - 5 * 60 * 60_000, 240, &good_long(), "s1", m1_key());
     ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 2);
     c.settle(0);
 }
@@ -361,7 +363,7 @@ fn sealed_signal_blocks_settlement() {
 #[test]
 fn quiet_period_refunds_subscribers() {
     let mut c = setup();
-    ctx("anyone.testnet", T0_MS + WEEK_MS, 0);
+    ctx("anyone.testnet", T0_MS + WEEK_MS, near(1) / 10);
     let r = match c.settle(0) {
         PromiseOrValue::Value(Some(r)) => r,
         _ => panic!("expected an immediate result"),
@@ -373,7 +375,8 @@ fn quiet_period_refunds_subscribers() {
     assert_eq!(m1_periods, vec![0]);
     assert_eq!(m1_amt.as_yoctonear() + m2_amt.as_yoctonear(), r.held.as_yoctonear());
     ctx("m1.testnet", T0_MS + WEEK_MS + 5, 0);
-    assert_eq!(c.claim_refund(0), m1_amt);
+    let got = c.claim_refund(0);
+    assert!(got < m1_amt && got.as_yoctonear() + near(1) / 100 > m1_amt.as_yoctonear(), "refund minus a little storage: {got}");
     assert_eq!(c.claimable(0, acc("m1.testnet")).0.as_yoctonear(), 0);
 }
 
@@ -381,7 +384,7 @@ fn quiet_period_refunds_subscribers() {
 #[should_panic(expected = "nothing to claim")]
 fn refund_cannot_be_claimed_twice() {
     let mut c = setup();
-    ctx("anyone.testnet", T0_MS + WEEK_MS, 0);
+    ctx("anyone.testnet", T0_MS + WEEK_MS, near(1) / 10);
     let _ = c.settle(0);
     ctx("m1.testnet", T0_MS + WEEK_MS + 5, 0);
     c.claim_refund(0);
@@ -398,7 +401,7 @@ fn settle_with(c: &mut SealedCalls, at_ms: u64, results: Vec<SignalScore>) -> Pe
     assert!(logs_have("settle_requested"));
     ctx("app.testnet", at_ms + 10_000, 0);
     let p = c.get_channel(0).unwrap().next_period;
-    c.on_scores(0, p, ids, ok(results)).expect("scored")
+    c.on_scores(0, p, ids, at_ms, ok(results)).expect("scored")
 }
 
 #[test]
@@ -406,7 +409,7 @@ fn positive_week_releases_the_held_half_to_the_creator() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
     let (b, pb) = post(&mut c, T0_MS + 20_000, 60, &body_json("short", 2, "3000", "3010", &["2900"], "3100"), "s2", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     c.reveal(b, pb);
     let held0 = c.period_held(0, 0);
@@ -428,7 +431,7 @@ fn positive_week_releases_the_held_half_to_the_creator() {
 fn negative_week_lets_subscribers_claim() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     let r = settle_with(&mut c, T0_MS + WEEK_MS + 1, vec![score(a, -10_000, "liquidated")]);
     assert!(!r.released);
@@ -441,10 +444,10 @@ fn negative_week_lets_subscribers_claim() {
 fn periods_settle_in_order_and_levels_carry() {
     let mut c = setup();
     ctx("m3.testnet", T0_MS, near(7));
-    c.subscribe(0, 2); // 30 days: periods 0..=4
+    c.subscribe(0, 2, None, None); // 30 days: periods 0..=4
     let expect: Vec<u128> = (0..5).map(|p| c.period_held(0, p).as_yoctonear()).collect();
     for (p, e) in expect.iter().enumerate() {
-        ctx("anyone.testnet", T0_MS + (p as u64 + 1) * WEEK_MS, 0);
+        ctx("anyone.testnet", T0_MS + (p as u64 + 1) * WEEK_MS, near(1) / 10);
         let r = match c.settle(0) {
             PromiseOrValue::Value(Some(r)) => r,
             _ => panic!("expected an immediate result"),
@@ -460,18 +463,18 @@ fn periods_settle_in_order_and_levels_carry() {
 fn failed_scoring_reopens_the_period() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 2);
     let _ = c.settle(0);
     ctx("app.testnet", T0_MS + WEEK_MS + 5, 0);
-    assert!(c.on_scores(0, 0, vec![a], Ok(None)).is_none());
+    assert!(c.on_scores(0, 0, vec![a], T0_MS + WEEK_MS + 1, Ok(None)).is_none());
     assert!(c.get_period(0, 0).is_none());
     ctx("anyone.testnet", T0_MS + WEEK_MS + 9, near(1) / 2);
     let _ = c.settle(0);
     ctx("app.testnet", T0_MS + WEEK_MS + 15, 0);
-    let bad = Ok(Some(ScoreOut { ok: true, results: vec![], error: None }));
-    assert!(c.on_scores(0, 0, vec![a], bad).is_none());
+    let bad = Ok(Some(ScoreOut { ok: true, results: vec![], error: None, failed: vec![] }));
+    assert!(c.on_scores(0, 0, vec![a], T0_MS + WEEK_MS + 9, bad).is_none());
     assert!(logs_have("settle_failed"));
 }
 
@@ -479,7 +482,7 @@ fn failed_scoring_reopens_the_period() {
 fn invalid_and_unrevealed_settle_without_outlayer() {
     let mut c = setup();
     let (a, _) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("anyone.testnet", T0_MS + 3 * 60 * 60_000, 0);
+    ctx("anyone.testnet", T0_MS + 10_000 + (60 + 1_440) * 60_000, near(1) / 10);
     c.mark_unrevealed(a);
     ctx("anyone.testnet", T0_MS + WEEK_MS, near(1));
     let r = match c.settle(0) {
@@ -501,7 +504,7 @@ fn score_formula() {
 
 fn late_reader(c: &mut SealedCalls, at_ms: u64) {
     ctx("m3.testnet", at_ms, near(3));
-    c.subscribe(0, 0);
+    c.subscribe(0, 0, None, None);
     c.register_key(0, PK_B.into());
 }
 
@@ -510,6 +513,9 @@ fn creator_shares_a_live_signal_with_a_late_subscriber() {
     let mut c = setup();
     let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
     late_reader(&mut c, T0_MS + 60_000);
+    ctx("alice.testnet", T0_MS + 65_000, near(1) / 10);
+    c.deposit_storage();
+    let credit = c.storage_credit(acc("alice.testnet"));
     ctx("alice.testnet", T0_MS + 70_000, 0);
     let n = c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }, WrappedKey { member: acc("m1.testnet"), key: "again".into() }])]);
     assert_eq!(n, 1); // m1 already had a key: skipped
@@ -517,6 +523,8 @@ fn creator_shares_a_live_signal_with_a_late_subscriber() {
     assert_eq!(s.wrapped_keys.len(), 2);
     assert_eq!(s.wrapped_keys[0].key, "wrapped");
     assert!(logs_have("signal_shared"));
+    // the storage came out of alice's prepaid credit, not the contract
+    assert!(c.storage_credit(acc("alice.testnet")) < credit);
 }
 
 #[test]
@@ -554,7 +562,7 @@ fn no_sharing_after_validity() {
 fn signals_get_official_scores_before_the_period_settles() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     ctx("keeper.testnet", T0_MS + 2 * 60 * 60_000 + 5, near(1) / 2);
     let _ = c.score_signals(vec![a]);
@@ -577,7 +585,7 @@ fn signals_get_official_scores_before_the_period_settles() {
 fn scoring_twice_is_refused() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10_000, 0);
     c.on_signal_scores(vec![a], ok(vec![score(a, 1500, "tp1")]));
@@ -598,7 +606,7 @@ fn sealed_signals_cannot_be_scored() {
 fn failed_scoring_changes_nothing() {
     let mut c = setup();
     let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
-    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
     c.reveal(a, pa);
     ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10_000, 0);
     assert_eq!(c.on_signal_scores(vec![a], Ok(None)), 0);
@@ -634,4 +642,239 @@ fn channel_tags_creator_only() {
     let mut c = setup();
     ctx("m1.testnet", T0_MS + 5000, near(1));
     c.update_channel(0, "Hack".into(), "".into(), plans(), 10, Some(vec!["perps".into()]));
+}
+
+// ------------------------------------------------------------------ audit fixes (Nov 13)
+
+fn panics<F: FnOnce()>(f: F) -> bool {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).is_err()
+}
+
+#[test]
+fn f2_grace_is_at_least_a_day() {
+    ctx("owner.testnet", T0_MS, 0);
+    let mut cfg = config();
+    cfg.grace_min = 30;
+    assert!(panics(|| { SealedCalls::new(cfg); }));
+}
+
+#[test]
+fn f1_sharing_needs_the_creators_storage_credit() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
+    late_reader(&mut c, T0_MS + 60_000);
+    ctx("alice.testnet", T0_MS + 70_000, 0);
+    assert!(panics(|| { c.share_signals(vec![(id, vec![WrappedKey { member: acc("m3.testnet"), key: "w3".into() }])]); }));
+}
+
+#[test]
+fn f1_storage_credit_can_be_withdrawn() {
+    let mut c = setup();
+    ctx("alice.testnet", T0_MS, near(1));
+    let credit = c.deposit_storage();
+    assert!(credit.as_yoctonear() > near(1) * 99 / 100);
+    ctx("alice.testnet", T0_MS, 0);
+    assert_eq!(c.withdraw_storage(None), credit);
+    assert_eq!(c.storage_credit(acc("alice.testnet")).as_yoctonear(), 0);
+}
+
+#[test]
+fn f1_plans_cannot_be_free() {
+    ctx("owner.testnet", T0_MS, 0);
+    let mut c = SealedCalls::new(config());
+    ctx("alice.testnet", T0_MS, near(1));
+    assert!(panics(|| { c.create_channel("x".into(), "".into(), vec![Plan { days: 7, price: NearToken::from_yoctonear(0) }], 25, None); }));
+}
+
+#[test]
+fn f1_reveal_and_register_pay_their_own_storage() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, 0);
+    assert!(panics(|| { c.reveal(a, pa.clone()); }));
+    ctx("m3.testnet", T0_MS, near(3));
+    c.subscribe(0, 0, None, None);
+    ctx("m3.testnet", T0_MS, 0);
+    assert!(panics(|| { c.register_key(0, PK_B.into()); }));
+}
+
+#[test]
+fn f3_config_changes_wait_a_day_and_outlayer_is_fixed() {
+    let mut c = setup();
+    ctx("owner.testnet", T0_MS + 1, 0);
+    let mut cfg = config();
+    cfg.min_signals = 3;
+    c.set_config(cfg.clone());
+    assert_eq!(c.get_config().min_signals, 1);
+    assert!(c.pending_config().is_some());
+    ctx("anyone.testnet", T0_MS + DAY_MS, 0);
+    assert!(panics(|| { let mut c2 = setup(); c2.apply_config() }));
+    ctx("anyone.testnet", T0_MS + 1 + DAY_MS, 0);
+    c.apply_config();
+    assert_eq!(c.get_config().min_signals, 3);
+    ctx("owner.testnet", T0_MS + 2 * DAY_MS, 0);
+    let mut evil = config();
+    evil.outlayer = acc("evil.testnet");
+    assert!(panics(|| { c.set_config(evil) }));
+}
+
+#[test]
+fn f6_bad_keys_are_refused() {
+    assert!(valid_x25519(PK_A));
+    assert!(!valid_x25519("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")); // all zero
+    assert!(!valid_x25519("AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")); // small order
+    assert!(!valid_x25519("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!=")); // not base64
+    assert!(!valid_x25519("AQID")); // wrong length
+}
+
+#[test]
+fn f15_rotating_a_key_drops_old_wraps_on_live_signals() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + 10_000, 240, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 60_000, near(1) / 10);
+    c.register_key(0, PK_B.into());
+    assert!(c.get_signal(id).unwrap().wrapped_keys.is_empty());
+    // …so the creator can share it again to the new key
+    ctx("alice.testnet", T0_MS + 65_000, near(1) / 10);
+    c.deposit_storage();
+    ctx("alice.testnet", T0_MS + 70_000, 0);
+    assert_eq!(c.share_signals(vec![(id, vec![WrappedKey { member: acc("m1.testnet"), key: "new".into() }])]), 1);
+}
+
+#[test]
+fn f7_too_many_unscored_signals_must_be_scored_first() {
+    ctx("owner.testnet", T0_MS, 0);
+    let mut cfg = config();
+    cfg.max_signals_per_day = 20;
+    let mut c = SealedCalls::new(cfg);
+    ctx("alice.testnet", T0_MS, near(1));
+    c.create_channel("A".into(), "".into(), plans(), 25, None);
+    let mut ids = vec![];
+    for i in 0..11 {
+        let p = payload(60, &good_long(), &format!("s{i}"));
+        ctx("alice.testnet", T0_MS + 10_000 + i, near(1));
+        let id = c.post_signal(0, 60, commit_of(&p), round_for(T0_MS + 10_000 + i, 60), "ct".into(), "m".into(), vec![]);
+        ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
+        c.reveal(id, p);
+        ids.push(id);
+    }
+    ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 2);
+    assert!(panics(|| { c.settle(0); }));
+}
+
+#[test]
+fn f7_a_settlement_that_never_returns_can_be_restarted() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
+    c.reveal(a, pa);
+    ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 2);
+    let _ = c.settle(0);
+    ctx("anyone.testnet", T0_MS + WEEK_MS + 60_000, near(1) / 2);
+    assert!(panics(|| { let _ = c.settle(0); }));
+    let t2 = T0_MS + WEEK_MS + 1 + SETTLE_TIMEOUT_MS;
+    ctx("anyone.testnet", t2, near(1) / 2);
+    let _ = c.settle(0);
+    // the first (stale) answer arrives late: its score is kept but it does not finish the period
+    ctx("app.testnet", t2 + 5, 0);
+    assert!(c.on_scores(0, 0, vec![a], T0_MS + WEEK_MS + 1, ok(vec![score(a, 500, "tp1")])).is_none());
+    assert_eq!(c.get_signal(a).unwrap().r_bps, Some(500));
+    assert_eq!(c.get_channel(0).unwrap().next_period, 0);
+    // the current one finishes it
+    let r = c.on_scores(0, 0, vec![a], t2, ok(vec![score(a, -500, "sl")])).expect("settled");
+    assert!(r.released);
+}
+
+#[test]
+fn f11_partly_failed_scoring_keeps_what_was_scored() {
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    let (b, pb) = post(&mut c, T0_MS + 20_000, 60, &good_long(), "s2", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
+    c.reveal(a, pa);
+    c.reveal(b, pb);
+    ctx("app.testnet", T0_MS + 2 * 60 * 60_000 + 10, 0);
+    let out = Ok(Some(ScoreOut { ok: true, results: vec![score(a, 300, "tp1")], error: None, failed: vec![b] }));
+    assert_eq!(c.on_signal_scores(vec![a, b], out), 1);
+    assert_eq!(c.get_signal(a).unwrap().r_bps, Some(300));
+    assert_eq!(c.get_signal(b).unwrap().r_bps, None);
+    assert!(check_scores(&[a, b], &[score(a, 1, "x")], &[a]).is_err());
+}
+
+#[test]
+fn f13_filled_reads_the_first_word() {
+    assert!(was_filled("tp1"));
+    assert!(was_filled("expired (15m)"));
+    for o in ["not_filled", "not_filled (15m)", "no_data", "no_trades", "no_pool_at_post", "invalid", "unrevealed", "below_floor", "no_market", ""] {
+        assert!(!was_filled(o), "{o}");
+    }
+}
+
+#[test]
+fn f10_f14_release_needs_filled_calls_and_any_positive_total() {
+    // +3 bps total: the rounded score is 0 but the record is positive -> released
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
+    c.reveal(a, pa);
+    assert!(settle_with(&mut c, T0_MS + WEEK_MS + 1, vec![score(a, 3, "expired")]).released);
+    // a never-filled call doesn't count towards min_signals
+    let mut c = setup();
+    let (a, pa) = post(&mut c, T0_MS + 10_000, 60, &good_long(), "s1", m1_key());
+    ctx("m1.testnet", T0_MS + 2 * 60 * 60_000, near(1) / 10);
+    c.reveal(a, pa);
+    assert!(!settle_with(&mut c, T0_MS + WEEK_MS + 1, vec![score(a, 0, "not_filled")]).released);
+}
+
+#[test]
+fn f12_subscribe_refuses_a_changed_plan() {
+    let mut c = setup();
+    ctx("alice.testnet", T0_MS, near(1) / 10);
+    c.update_channel(0, "Alice Alpha".into(), "".into(), vec![Plan { days: 1, price: NearToken::from_near(2) }], 25, None);
+    ctx("m3.testnet", T0_MS + 5, near(3));
+    assert!(panics(|| { c.subscribe(0, 0, Some(7), Some(NearToken::from_near(2))); }));
+    c.subscribe(0, 0, Some(1), Some(NearToken::from_near(2)));
+}
+
+#[test]
+fn f16_signals_count_in_the_period_they_end() {
+    let mut c = setup();
+    let (id, _) = post(&mut c, T0_MS + WEEK_MS - 60 * 60_000, 240, &good_long(), "s1", m1_key());
+    assert_eq!(c.get_signal(id).unwrap().period, 1);
+    // period 0 can settle without waiting for it
+    ctx("anyone.testnet", T0_MS + WEEK_MS + 1, near(1) / 10);
+    assert!(matches!(c.settle(0), PromiseOrValue::Value(Some(_))));
+}
+
+#[test]
+fn f21_daily_limit_is_per_creator() {
+    let mut c = setup();
+    ctx("alice.testnet", T0_MS, near(1));
+    c.create_channel("Second".into(), "".into(), plans(), 25, None);
+    for i in 0..5 {
+        post(&mut c, T0_MS + 10_000 + i, 60, &good_long(), &format!("s{i}"), m1_key());
+    }
+    let p = payload(60, &good_long(), "x").replace("\"channel\":0", "\"channel\":1");
+    ctx("alice.testnet", T0_MS + 20_000, near(1));
+    assert!(panics(|| { c.post_signal(1, 60, commit_of(&p), round_for(T0_MS + 20_000, 60), "ct".into(), "m".into(), vec![]); }));
+}
+
+#[test]
+fn f8_failed_refund_can_be_claimed_again() {
+    let mut c = setup();
+    ctx("anyone.testnet", T0_MS + WEEK_MS, near(1) / 10);
+    let _ = c.settle(0);
+    ctx("m1.testnet", T0_MS + WEEK_MS + 5, 0);
+    let (_, periods) = c.claimable(0, acc("m1.testnet"));
+    c.claim_refund(0);
+    assert_eq!(c.claimable(0, acc("m1.testnet")).0.as_yoctonear(), 0);
+    ctx("app.testnet", T0_MS + WEEK_MS + 6, 0);
+    c.on_refund_paid(0, acc("m1.testnet"), periods, Err(PromiseError::Failed));
+    assert!(c.claimable(0, acc("m1.testnet")).0.as_yoctonear() > 0);
+    // a failed payout is owed and can be withdrawn
+    c.on_paid(acc("alice.testnet"), NearToken::from_near(1), Err(PromiseError::Failed));
+    assert_eq!(c.owed(acc("alice.testnet")), NearToken::from_near(1));
+    ctx("alice.testnet", T0_MS + WEEK_MS + 7, 0);
+    assert_eq!(c.withdraw_owed(), NearToken::from_near(1));
+    assert_eq!(c.owed(acc("alice.testnet")).as_yoctonear(), 0);
 }

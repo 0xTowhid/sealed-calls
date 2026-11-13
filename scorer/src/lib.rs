@@ -86,6 +86,47 @@ pub struct JobOut {
     pub ok: bool,
     pub results: Vec<SignalScore>,
     pub error: Option<String>,
+    /// Signals that could not be scored this time (source down, time budget); retried later.
+    pub failed: Vec<u64>,
+}
+
+/// Quote tokens by address on the networks where we know them: a token merely *named* "USDC" or
+/// "SOL" doesn't count there. Other networks fall back to the symbol list.
+pub const MAJOR_ADDRESSES: &[(&str, &[&str])] = &[
+    ("solana", &[
+        "So11111111111111111111111111111111111111112", // wSOL
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+    ]),
+    ("eth", &[
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+        "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
+        "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", // WBTC
+    ]),
+    ("base", &[
+        "0x4200000000000000000000000000000000000006", // WETH
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // USDC
+        "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf", // cbBTC
+    ]),
+    ("bsc", &[
+        "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", // WBNB
+        "0x55d398326f99059ff775485246999027b3197955", // USDT
+        "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", // USDC
+    ]),
+    ("arbitrum", &[
+        "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", // WETH
+        "0xaf88d065e77c8cc2239327c5edb3a432268e5831", // USDC
+    ]),
+];
+
+/// Is `addr` / `symbol` an accepted quote token on `network`?
+pub fn is_major(network: &str, addr: &str, symbol: &str) -> bool {
+    match MAJOR_ADDRESSES.iter().find(|(n, _)| *n == network) {
+        Some((_, list)) => list.iter().any(|a| a.eq_ignore_ascii_case(addr)),
+        None => MAJORS.contains(&symbol),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -302,6 +343,12 @@ pub fn dex_side_cost(pool: &Pool, ref_usd: f64) -> f64 {
     (fee + ref_usd / (0.5 * pool.liquidity_usd.max(1.0))).min(0.99)
 }
 
+/// The candle pool must itself clear the floor (not some other, newer pool); returns its
+/// per-side cost for the reference trade.
+pub fn dex_check(pool: &Pool, floor_usd: f64) -> Result<(), &'static str> {
+    if pool.liquidity_usd < floor_usd { Err("below_floor") } else { Ok(()) }
+}
+
 /// Deepest pool that existed at `at_s` (or now, for None).
 pub fn pick_pool(pools: &[Pool], at_s: Option<u64>) -> Option<&Pool> {
     pools
@@ -328,6 +375,11 @@ pub fn sig6(x: f64) -> String {
 /// GeckoTerminal `/networks/{n}/tokens/{t}/pools?include=base_token,quote_token`: pools where the
 /// other side is a major (wrapped native or stablecoin).
 pub fn parse_pools(v: &serde_json::Value, token: &str) -> Vec<Pool> {
+    parse_pools_on(v, token, "")
+}
+
+/// As `parse_pools`, checking quote tokens by address on `network` when it is a known network.
+pub fn parse_pools_on(v: &serde_json::Value, token: &str, network: &str) -> Vec<Pool> {
     let included = v["included"].as_array().map(|a| a.as_slice()).unwrap_or(&[]);
     let symbol_of = |id: &str| -> String {
         included
@@ -347,7 +399,7 @@ pub fn parse_pools(v: &serde_json::Value, token: &str) -> Vec<Pool> {
             let b = p["relationships"]["base_token"]["data"]["id"].as_str().unwrap_or("");
             let q = p["relationships"]["quote_token"]["data"]["id"].as_str().unwrap_or("");
             let other = if addr_of(b).eq_ignore_ascii_case(token) { q } else if addr_of(q).eq_ignore_ascii_case(token) { b } else { return false };
-            MAJORS.contains(&symbol_of(other).as_str())
+            is_major(network, &addr_of(other), symbol_of(other).as_str())
         })
         .filter_map(|p| {
             let a = &p["attributes"];
@@ -519,6 +571,43 @@ mod tests {
     fn window_keeps_complete_candles_inside_validity() {
         let w = window(&[c(90, 1.0), c(120, 2.0), c(180, 3.0), c(240, 4.0)], 100, 240, 60);
         assert_eq!(w.iter().map(|c| c.t).collect::<Vec<_>>(), vec![120, 180]);
+    }
+
+    #[test]
+    fn quote_tokens_by_address_on_known_networks() {
+        // a fake "USDC" on Solana doesn't count; the real mint does
+        assert!(!is_major("solana", "FakeUsdcMint111", "USDC"));
+        assert!(is_major("solana", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC"));
+        assert!(is_major("base", "0x833589FCD6EDB6E08F4C7C32D4F71B54BDA02913", "USDC"));
+        // unknown networks: by symbol
+        assert!(is_major("robinhood", "0xabc", "USDG"));
+        let v = serde_json::json!({
+            "data": [
+                { "attributes": { "address": "P1", "reserve_in_usd": "250000" },
+                  "relationships": { "base_token": { "data": { "id": "solana_MINT" } }, "quote_token": { "data": { "id": "solana_FAKE" } } } },
+                { "attributes": { "address": "P2", "reserve_in_usd": "150000" },
+                  "relationships": { "base_token": { "data": { "id": "solana_MINT" } }, "quote_token": { "data": { "id": "solana_So11111111111111111111111111111111111111112" } } } }
+            ],
+            "included": [
+                { "id": "solana_FAKE", "attributes": { "symbol": "USDC" } },
+                { "id": "solana_So11111111111111111111111111111111111111112", "attributes": { "symbol": "SOL" } }
+            ]
+        });
+        let p = parse_pools_on(&v, "MINT", "solana");
+        assert_eq!(p.iter().map(|p| p.address.as_str()).collect::<Vec<_>>(), vec!["P2"]);
+    }
+
+    #[test]
+    fn floor_and_costs_use_the_pool_the_candles_come_from() {
+        // old thin pool (existed at the post) + a new deep pool: the candles' pool is below the floor
+        let pools = vec![
+            Pool { address: "old".into(), liquidity_usd: 20_000.0, created_at_s: Some(100), fee: None },
+            Pool { address: "new".into(), liquidity_usd: 900_000.0, created_at_s: Some(5_000), fee: None },
+        ];
+        let p = pick_pool(&pools, Some(1_000)).unwrap();
+        assert_eq!(p.address, "old");
+        assert_eq!(dex_check(p, 100_000.0), Err("below_floor"));
+        assert!(dex_check(&pools[1], 100_000.0).is_ok());
     }
 
     #[test]

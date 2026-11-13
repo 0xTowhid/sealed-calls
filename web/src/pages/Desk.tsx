@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { call, currentPeriod, getConfig, listChannels, periodHeld, readersNow, subscribers, view } from "../near";
+import { call, currentPeriod, getConfig, listChannels, periodHeld, readersNow, storageCredit, subscribers, view } from "../near";
 import { useLoad, useNow } from "../data";
 import { dur, near, pct, periodWord, planName, price, sig, when } from "../format";
 import { creatorSecret, exportSecret, importSecret, openWithKey, seal, signalKey, wrapFor } from "../crypto";
@@ -351,7 +351,9 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
 
 // ------------------------------------------------------------------ late access
 
-type Share = { live: number; shared: string[]; waiting: number; cantOpen: number; error: string | null };
+type Share = { live: number; shared: string[]; waiting: number; cantOpen: number; error: string | null; credit: bigint };
+/** Sharing pays its storage from the creator's prepaid credit; below this the desk asks for a top-up. */
+const MIN_CREDIT = BigInt(NEAR(0.005));
 
 /**
  * While the desk is open, wraps live (sealed, still valid) signals to subscribers who joined or
@@ -388,7 +390,10 @@ function LateAccess({ ch, account }: { ch: Channel; account: string }) {
       }
       let shared: string[] = [];
       let error: string | null = null;
-      if (send && items.length) {
+      const credit = BigInt(await storageCredit(account));
+      if (send && items.length && credit < MIN_CREDIT) {
+        error = "Add storage credit to share live signals with new subscribers (sharing stores their keys on-chain).";
+      } else if (send && items.length) {
         try {
           await call("share_signals", { items: items.slice(0, 20) }, "0", GAS_100);
           shared = [...names];
@@ -398,7 +403,7 @@ function LateAccess({ ch, account }: { ch: Channel; account: string }) {
           setAuto(false); // don't keep asking the wallet after a refusal
         }
       }
-      setSt({ live: sigs.length, shared, waiting, cantOpen, error });
+      setSt({ live: sigs.length, shared, waiting, cantOpen, error, credit });
     } finally {
       busy.current = false;
     }
@@ -417,12 +422,13 @@ function LateAccess({ ch, account }: { ch: Channel; account: string }) {
     <section className="sheet" style={{ marginTop: 26 }}>
       <h2>Late subscribers</h2>
       <p className="sub">
-        Someone who subscribes while a signal is live gets it while this page is open: it shares your live signals with new subscribers every 30 seconds.
+        Someone who subscribes while a signal is live gets it while this page is open: it shares your live signals with new subscribers every 30 seconds. The keys it stores are paid from your storage credit (about 0.002 NEAR per subscriber per signal; withdraw the rest any time).
       </p>
       {st && (
         <dl className="kv">
           <dt>Live signals</dt><dd>{st.live}</dd>
           <dt>Waiting</dt><dd>{st.waiting ? `${st.waiting} share${st.waiting > 1 ? "s" : ""} pending` : "every active subscriber has every live signal"}</dd>
+          <dt>Storage credit</dt><dd>{near(st.credit.toString())} <Act className="btn small ghost" label="Add 0.1 NEAR" run={async () => { await call("deposit_storage", {}, NEAR(0.1)); await pass(auto); }} /></dd>
           {st.shared.length > 0 && <><dt>Just shared</dt><dd className="gain">with {st.shared.join(", ")}</dd></>}
           {st.cantOpen > 0 && <><dt>Can't share</dt><dd className="sub0">{st.cantOpen} live signal{st.cantOpen > 1 ? "s were" : " was"} posted {creatorSecret(account) ? "from another browser (paste that browser's creator key below)" : "before this browser had a creator key"}. {st.cantOpen > 1 ? "They open" : "It opens"} for everyone when {st.cantOpen > 1 ? "they end" : "it ends"}; every signal you post from here can be shared.</dd></>}
         </dl>

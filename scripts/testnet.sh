@@ -28,7 +28,7 @@ js() { node -e "$1" "${@:2}"; }
 WASM=../contract/target/near/sealed_calls.wasm
 build() { (cd ../contract && cargo near build non-reproducible-wasm --no-embed-abi 2>&1 | tail -2); log "wasm sha256 $(sha256sum "$WASM" | cut -d' ' -f1)"; }
 config_json() { # period_minutes
-  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":30,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
+  echo "{\"config\":{\"owner\":\"$MAIN\",\"period_minutes\":$1,\"grace_min\":1440,\"min_signals\":1,\"max_signals_per_day\":10,\"scorer_wasm_url\":\"$SCORER_URL\",\"scorer_wasm_hash\":\"$SCORER_HASH\",\"outlayer\":\"outlayer.testnet\",\"reference_usd\":500,\"liquidity_floor_usd\":100000}}"
 }
 
 # Refuse to sign anything unless the secret's key really is a full-access key of $MAIN on testnet.
@@ -54,19 +54,32 @@ reveal_all() {
     if OPENED=$(node sc.mjs tlock-open /tmp/s.json 2>/dev/null); then
       log "signal $ID opened from drand: $OPENED"
       PT=$(js "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
-      call "$M2" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0 NEAR'
+      call "$M2" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0.02 NEAR'
     else
       log "signal $ID cannot be opened yet; trying mark_unrevealed"
-      call "$M2" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0 NEAR'
+      call "$M2" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0.01 NEAR'
     fi
+  done
+}
+
+# Every signal of channel $2 on $1 (newest first), paged by 100, into file $3.
+all_sigs() {
+  local C=$1 CH=$2 OUT=$3 N FROM
+  N=$(view get_channel "{\"channel\":$CH}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).signal_count))")
+  echo "[]" > "$OUT"
+  for ((FROM=N; FROM>0; FROM-=100)); do
+    view list_signals "{\"channel\":$CH,\"from_index\":$FROM,\"limit\":100}" > /tmp/page.json
+    js "const fs=require('fs');fs.writeFileSync('$OUT',JSON.stringify(JSON.parse(fs.readFileSync('$OUT','utf8')).concat(JSON.parse(fs.readFileSync('/tmp/page.json','utf8')))))"
   done
 }
 
 # Official scores as soon as signals end (no waiting for the period): score_signals on OutLayer.
 score_ended() {
   local C=$1 CH=$2 IDS LEFT
-  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
-  IDS=$(js "const now=Date.now();const ids=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).map(s=>s.id).slice(0,10);console.log(ids.join(','))")
+  all_sigs "$C" "$CH" /tmp/sigs.json
+  # A random batch each run (so one signal that keeps failing can't block the others), with at most
+  # 3 DEX signals (GeckoTerminal is rate-limited and paced inside the job).
+  IDS=$(js "const now=Date.now();const c=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).sort(()=>Math.random()-0.5);const dex=c.filter(s=>s.body.market.venue!=='hyperliquid').slice(0,3);const ids=c.filter(s=>s.body.market.venue==='hyperliquid').slice(0,10-dex.length).concat(dex).map(s=>s.id);console.log(ids.join(','))")
   if [ -n "$IDS" ]; then
     log "channel $CH: scoring signals [$IDS] on OutLayer"
     call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | cut -c1-300
@@ -84,16 +97,16 @@ score_ended() {
 keep_channel() {
   local C=$1 CH=$2 NOW GRACE
   NOW=$(date +%s); GRACE=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).grace_min*60))")
-  view list_signals "{\"channel\":$CH,\"limit\":100}" > /tmp/sigs.json
+  all_sigs "$C" "$CH" /tmp/sigs.json
   for ID in $(js "const now=$NOW*1000;for (const s of require('/tmp/sigs.json')) if (s.status==='Sealed' && now>=s.posted_at_ms+s.valid_min*60000 && now>=(1692803367+(s.reveal_round-1)*3+5)*1000) console.log(s.id)"); do
     js "require('fs').writeFileSync('/tmp/s.json',JSON.stringify(require('/tmp/sigs.json').find(s=>s.id==$ID)))"
     if OPENED=$(node sc.mjs tlock-open /tmp/s.json 2>/dev/null) && echo "$OPENED" | grep -q '"matches":true'; then
       log "channel $CH signal $ID: revealing from drand"
       PT=$(js "console.log(JSON.stringify(JSON.parse(process.argv[1]).plaintext))" "$OPENED")
-      call "$MAIN" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
+      call "$MAIN" "$C" reveal "{\"signal_id\":$ID,\"plaintext\":$PT}" '0.02 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
     elif [ "$NOW" -ge "$(js "const s=require('/tmp/s.json');console.log(Math.ceil((s.posted_at_ms+s.valid_min*60000)/1000)+$GRACE)")" ]; then
       log "channel $CH signal $ID: drand copy doesn't open and grace is over -> mark_unrevealed"
-      call "$MAIN" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
+      call "$MAIN" "$C" mark_unrevealed "{\"signal_id\":$ID}" '0.01 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-240
     else
       log "channel $CH signal $ID: ended but its drand copy doesn't open; waiting for the grace period"
     fi
@@ -110,7 +123,8 @@ settle_ready() {
     local CUR; CUR=$(view current_period "{\"channel\":$CH}")
     [ "$NP" -lt "$CUR" ] || { log "period $NP has not ended yet (current $CUR)"; break; }
     # A period settles only when every signal posted in it has ended and been revealed.
-    local WAIT; WAIT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const w=JSON.parse(s).filter(x=>x.period==$NP&&x.status==='Sealed');console.log(w.map(x=>x.id+' (opens '+new Date(x.posted_at_ms+x.valid_min*60000).toISOString().slice(0,16)+'Z)').join(', '))})")
+    all_sigs "$C" "$CH" /tmp/allsigs.json
+    local WAIT; WAIT=$(cat /tmp/allsigs.json | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const w=JSON.parse(s).filter(x=>x.period==$NP&&x.status==='Sealed');console.log(w.map(x=>x.id+' (opens '+new Date(x.posted_at_ms+x.valid_min*60000).toISOString().slice(0,16)+'Z)').join(', '))})")
     [ -z "$WAIT" ] || { log "period $NP waits for sealed signal(s): $WAIT"; return 0; }
     log "settle channel $CH period $NP (held $(view period_held "{\"channel\":$CH,\"period\":$NP}"))"
     call "$MAIN" "$C" settle "{\"channel\":$CH}" '0.5 NEAR' 300
@@ -174,10 +188,10 @@ deploy)
   if view get_config '{}' >/dev/null 2>&1; then
     log "upgrading existing v2 contract (state kept); pointing it at the current scorer (TOPUP=<n> also sends n NEAR for storage)"
     [ -n "${TOPUP:-}" ] && near tokens "$MAIN" send-near "$APP" "$TOPUP NEAR" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
-    near contract deploy "$APP" use-file "$WASM" without-init-call network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
-    sleep 3
-    CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.scorer_wasm_url=process.argv[1];c.scorer_wasm_hash=process.argv[2];console.log(JSON.stringify({config:c}))})" "$SCORER_URL" "$SCORER_HASH")
-    call "$MAIN" "$APP" set_config "$CFG" '0 NEAR'
+    # New code + its config in one transaction (migrate keeps all state). Config changes after this
+    # go through set_config, which waits a day once channels exist.
+    CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.scorer_wasm_url=process.argv[1];c.scorer_wasm_hash=process.argv[2];c.grace_min=Math.max(c.grace_min,1440);console.log(JSON.stringify({config:c}))})" "$SCORER_URL" "$SCORER_HASH")
+    near contract deploy "$APP" use-file "$WASM" with-init-call migrate json-args "$CFG" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error|rror"
   else
     near contract deploy "$APP" use-file "$WASM" with-init-call new json-args "$(config_json 1440)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
   fi
@@ -205,7 +219,7 @@ e2e)
   log "2. $M1 subscribes (1 day) and registers a key; $M2 subscribes without a key"
   call "$M1" "$C" subscribe '{"channel":0,"plan":0}' '0.25 NEAR'
   PUB=$(node sc.mjs member-keygen /tmp/m1.key)
-  call "$M1" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB\"}" '0 NEAR'
+  call "$M1" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB\"}" '0.01 NEAR'
   call "$M2" "$C" subscribe '{"channel":0,"plan":0}' '0.25 NEAR'
   log "   subscribers: $(view subscribers '{"channel":0}')"
   log "   held for period 0: $(view period_held '{"channel":0,"period":0}')  (half of 0.4 NEAR, spread over each day)"
@@ -221,8 +235,9 @@ e2e)
   log "   public tlock-open now (must fail): $(node sc.mjs tlock-open /tmp/s0.json 2>&1 | head -c 120)"
   log "4b. late access: $M2 sets up a key only now; the creator shares the live signal with them"
   PUB2=$(node sc.mjs member-keygen /tmp/m2.key)
-  call "$M2" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB2\"}" '0 NEAR'
+  call "$M2" "$C" register_key "{\"channel\":0,\"pubkey\":\"$PUB2\"}" '0.01 NEAR'
   W2=$(node sc.mjs wrap /tmp/post.json.key "$PUB2")
+  call "$MAIN" "$C" deposit_storage '{}' '0.05 NEAR' | grep -E "rror" | cut -c1-200   # late access pays storage from the creator's credit
   call "$MAIN" "$C" share_signals "{\"items\":[[0,[{\"member\":\"$M2\",\"key\":\"$W2\"}]]]}" '0 NEAR' | grep -E "EVENT_JSON|rror" | cut -c1-200
   sleep 3; view get_signal '{"signal_id":0}' > /tmp/s0.json
   LATE=$(node sc.mjs member-open /tmp/s0.json "$M2" /tmp/m2.key)

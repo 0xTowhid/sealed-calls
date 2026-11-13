@@ -14,28 +14,52 @@ const HL: &str = "https://api.hyperliquid.xyz/info";
 
 fn main() {
     let out = match run() {
-        Ok(results) => JobOut { ok: true, results, error: None },
-        Err(e) => JobOut { ok: false, results: vec![], error: Some(e) },
+        Ok((results, failed, error)) => JobOut { ok: true, results, error, failed },
+        Err(e) => JobOut { ok: false, results: vec![], error: Some(e), failed: vec![] },
     };
     print!("{}", serde_json::to_string(&out).unwrap());
     io::stdout().flush().ok();
 }
 
-fn run() -> Result<Vec<SignalScore>, String> {
+/// Stop starting new signals after this many seconds (OutLayer allows 180): the rest are reported
+/// as failed and retried by the next request instead of failing the whole job.
+const TIME_BUDGET_S: u64 = 120;
+
+fn run() -> Result<(Vec<SignalScore>, Vec<u64>, Option<String>), String> {
+    let started = std::time::Instant::now();
     let mut raw = String::new();
     io::stdin().read_to_string(&mut raw).map_err(|e| e.to_string())?;
     let job: JobIn = serde_json::from_str(&raw).map_err(|e| format!("bad input: {e}"))?;
     let now_s = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs();
     // Hyperliquid perp names, fetched once if any signal needs them.
-    let hl_coins: Vec<String> = if job.signals.iter().any(|s| s.venue == "hyperliquid") {
-        post(HL, &json!({ "type": "meta" }))?["universe"]
-            .as_array()
-            .map(|u| u.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
-            .unwrap_or_default()
+    // (A failure to load it fails only the Hyperliquid signals.)
+    let hl_coins: Result<Vec<String>, String> = if job.signals.iter().any(|s| s.venue == "hyperliquid") {
+        post(HL, &json!({ "type": "meta" })).map(|v| {
+            v["universe"].as_array().map(|u| u.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect()).unwrap_or_default()
+        })
     } else {
-        vec![]
+        Ok(vec![])
     };
-    job.signals.iter().map(|s| score(s, now_s, job.reference_usd, job.liquidity_floor_usd, &hl_coins)).collect()
+    let (mut results, mut failed, mut first_err) = (vec![], vec![], None);
+    for s in &job.signals {
+        if started.elapsed().as_secs() > TIME_BUDGET_S {
+            failed.push(s.id);
+            first_err.get_or_insert_with(|| "time budget used up".to_string());
+            continue;
+        }
+        let r = match (&hl_coins, s.venue.as_str()) {
+            (Err(e), "hyperliquid") => Err(e.clone()),
+            (coins, _) => score(s, now_s, job.reference_usd, job.liquidity_floor_usd, coins.as_deref().unwrap_or(&[])),
+        };
+        match r {
+            Ok(x) => results.push(x),
+            Err(e) => {
+                failed.push(s.id);
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    Ok((results, failed, first_err))
 }
 
 fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[String]) -> Result<SignalScore, String> {
@@ -61,12 +85,16 @@ fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[Str
             let (floor_usd, rules) = if micro { (MICRO_FLOOR_USD, MICRO) } else { (floor_usd, NORMAL) };
             let net = s.network.clone().unwrap_or_default();
             let v = get(&format!("{GT}/{net}/tokens/{}/pools?include=base_token,quote_token", s.address))?;
-            let pools = parse_pools(&v, &s.address);
-            let Some(now_pool) = pick_pool(&pools, None) else { return Ok(lose(s.id, "no_market")) };
-            if now_pool.liquidity_usd < floor_usd {
-                return Ok(lose(s.id, "below_floor"));
+            let pools = parse_pools_on(&v, &s.address, &net);
+            if pools.is_empty() {
+                return Ok(lose(s.id, "no_market"));
             }
+            // The pool the candles come from (deepest of those that existed at the post) must
+            // itself clear the floor; a newer pool can't lend it liquidity.
             let Some(pool) = pick_pool(&pools, Some(posted_s)) else { return Ok(lose(s.id, "no_pool_at_post")) };
+            if let Err(why) = dex_check(pool, floor_usd) {
+                return Ok(lose(s.id, why));
+            }
             let (sec, tf, agg) = gt_interval(posted_s, end_s);
             let mut all = vec![];
             let mut before = end_s;
@@ -87,7 +115,8 @@ fn score(s: &SignalIn, now_s: u64, ref_usd: f64, floor_usd: f64, hl_coins: &[Str
             if candles.is_empty() {
                 return Ok(SignalScore { id: s.id, r_bps: 0, outcome: "no_trades".into(), fill_price: None, exit_price: None, cost_bps: None });
             }
-            let (c_in, c_out) = (dex_side_cost(pool, ref_usd), dex_side_cost(now_pool, ref_usd));
+            let c = dex_side_cost(pool, ref_usd);
+            let (c_in, c_out) = (c, c);
             Ok(finish(s.id, &plan, &walk_with(&plan, &candles, rules), c_in, c_out, sec))
         }
         _ => Ok(lose(s.id, "invalid")),

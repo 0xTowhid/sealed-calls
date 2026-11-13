@@ -76,13 +76,13 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
 
   const subscribe = async () => {
     const deposit = (BigInt(p.price) + BigInt(NEAR(0.05))).toString();
-    await call("subscribe", { channel: id, plan: sel }, deposit);
+    await call("subscribe", { channel: id, plan: sel, expect_days: p.days, max_price: p.price }, deposit);
     await reload();
   };
   const reveal = async (s: Signal) => {
     const o = await tlockOpen(s);
     if (!o.matches) throw new Error("The timelocked copy doesn't match the commitment; a subscriber can reveal from their copy.");
-    await call("reveal", { signal_id: s.id, plaintext: o.plaintext });
+    await call("reveal", { signal_id: s.id, plaintext: o.plaintext }, NEAR(0.02));
     await reload();
   };
 

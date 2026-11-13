@@ -143,7 +143,7 @@ export function Explore({ account }: { account?: string | null }) {
             <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>{{ all: "All", perp: "Perps", dex: "DEX tokens", micro: "Micro-caps" }[f]}</button>
           ))}
         </div>
-        <span className="sort">Ranked by score: total result ÷ (calls + 5), so one lucky call can't top the board</span>
+        <span className="sort">Ranked by score: total result ÷ (calls + 5), which dampens a few lucky calls (a single +300% call still scores +50%)</span>
       </div>
       {error && <div className="notice err">{error}</div>}
       <section className="panel">

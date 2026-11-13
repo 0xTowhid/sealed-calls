@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { balanceOf, listChannels, signIn, signOut } from "./near";
+import { balanceOf, call, listChannels, owedTo, pendingConfig, signIn, signOut } from "./near";
 import { useAccount, useLoad } from "./data";
 import { nearNum, slug } from "./format";
 import { Avatar } from "./ui";
-import { CONTRACT, EXPLORER } from "./config";
+import { CONTRACT, CONTRACT_OVERRIDDEN, EXPLORER } from "./config";
 import { Explore } from "./pages/Explore";
 // Pages that need the crypto libraries (drand timelock, libsodium) load on demand.
 const ChannelPage = lazy(() => import("./pages/Channel").then((m) => ({ default: m.ChannelPage })));
@@ -89,6 +89,13 @@ export default function App() {
       {nav("mtabs")}
 
       <main className="wrap">
+        {CONTRACT_OVERRIDDEN && (
+          <div className="notice err" role="alert">
+            This page is showing contract <b>{CONTRACT}</b>, set by the link you opened, not the official Sealed Calls contract. Don't subscribe or pay here unless you trust it. <a href={window.location.pathname}>Open the official one</a>.
+          </div>
+        )}
+        <Owed account={account} />
+        <PendingConfig />
         <Suspense fallback={<p className="empty">Loading…</p>}>
           {page === "explore" && <Explore account={account} />}
           {page === "c" && !at && <ChannelPage id={Number(route[1] ?? 0)} account={account} />}
@@ -115,5 +122,28 @@ export default function App() {
         </footer>
       </main>
     </>
+  );
+}
+
+/** NEAR whose payout transfer failed and is kept for the account (withdraw_owed). */
+function Owed({ account }: { account: string | null }) {
+  const { data: owed, reload } = useLoad(async () => (account ? owedTo(account) : "0"), [account]);
+  if (!account || !owed || owed === "0") return null;
+  return (
+    <div className="notice ok-n">
+      {nearNum(owed).toLocaleString(undefined, { maximumFractionDigits: 4 })} NEAR is owed to you (a payout transfer didn't go through).{" "}
+      <button className="btn small" onClick={async () => { await call("withdraw_owed", {}); await reload(); }}>Withdraw</button>
+    </div>
+  );
+}
+
+/** Config changes are delayed a day so everyone sees them coming. */
+function PendingConfig() {
+  const { data: p } = useLoad(pendingConfig, []);
+  if (!p) return null;
+  return (
+    <div className="notice">
+      A rules change is scheduled on the contract for {new Date(p.eta_ms).toUTCString()} (scorer {p.config.scorer_wasm_hash.slice(0, 10)}…, grace {Math.round(p.config.grace_min / 60)} h, at least {p.config.min_signals} filled call{p.config.min_signals === 1 ? "" : "s"} per paid {p.config.period_minutes >= 10080 ? "week" : "day"}).
+    </div>
   );
 }

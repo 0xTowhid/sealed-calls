@@ -2,7 +2,10 @@
 const q = new URLSearchParams(window.location.search);
 
 export const NETWORK = "testnet" as const;
-export const CONTRACT = q.get("contract") ?? (import.meta.env.VITE_CONTRACT as string | undefined) ?? "app.to69.testnet";
+export const OFFICIAL_CONTRACT = (import.meta.env.VITE_CONTRACT as string | undefined) ?? "app.to69.testnet";
+export const CONTRACT = q.get("contract") ?? OFFICIAL_CONTRACT;
+/** True when a link points the app at another contract: the app shows a warning banner. */
+export const CONTRACT_OVERRIDDEN = CONTRACT !== OFFICIAL_CONTRACT;
 
 export const RPCS = ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://near-testnet.lava.build"];
 export const EXPLORER = "https://testnet.nearblocks.io";
