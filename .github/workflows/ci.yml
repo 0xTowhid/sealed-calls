@@ -47,7 +47,10 @@ jobs:
           cp contract/target/near/sealed_calls.wasm dist/
       - name: build scorer (wasm32-wasip2)
         run: |
-          (cd scorer && cargo build --target wasm32-wasip2 --release 2>&1) | tail -5 | tee results/build-scorer.txt
+          # Pinned: newer Rust exports wasi:cli/run@0.2.12 only, which OutLayer's runtime doesn't run.
+          rustup toolchain install 1.97.0 --profile minimal --target wasm32-wasip2
+          (cd scorer && cargo +1.97.0 build --target wasm32-wasip2 --release 2>&1) | tail -5 | tee results/build-scorer.txt
+          rustc +1.97.0 --version | tee -a results/build-scorer.txt
           cp scorer/target/wasm32-wasip2/release/scorer.wasm dist/
           (cd dist && sha256sum *.wasm | tee ../results/wasm-sha256.txt && ls -l *.wasm | tee -a ../results/wasm-sha256.txt)
       - uses: actions/upload-artifact@v4
