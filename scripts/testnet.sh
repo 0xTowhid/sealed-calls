@@ -164,6 +164,11 @@ floor)  # floor=<usd>: set the DEX liquidity floor in the contract config (no up
   sleep 2; log "liquidity floor now: $(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).liquidity_floor_usd))")"
   ;;
 
+diag)  # diag=<OutLayer request id>: what OutLayer recorded for that execution (read-only)
+  curl -s "https://testnet-api.outlayer.ai/attestations/by-request/$ARG" | head -c 4000; echo
+  curl -s "https://testnet-api.outlayer.ai/public/stats" | head -c 600; echo
+  ;;
+
 delete)  # delete=<account> (a sub-account of MAIN); its NEAR goes back to MAIN
   near account delete-account "$ARG" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|deleted" | head -3
   ;;
