@@ -187,7 +187,10 @@ deploy)
   fi
   if view get_config '{}' >/dev/null 2>&1; then
     log "upgrading existing v2 contract (state kept); pointing it at the current scorer (TOPUP=<n> also sends n NEAR for storage)"
-    [ -n "${TOPUP:-}" ] && near tokens "$MAIN" send-near "$APP" "$TOPUP NEAR" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
+    # Larger code is staked from the contract's balance, which holds subscribers' escrow: top it up
+    # by the growth (default 0.3 NEAR) so the upgrade never eats escrow.
+    near tokens "$MAIN" send-near "$APP" "${TOPUP:-0.3} NEAR" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error" | head -2
+    log "free balance before: $(view free_balance '{}' 2>/dev/null)"
     # New code + its config in one transaction (migrate keeps all state). Config changes after this
     # go through set_config, which waits a day once channels exist.
     CFG=$(view get_config '{}' | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);c.scorer_wasm_url=process.argv[1];c.scorer_wasm_hash=process.argv[2];c.grace_min=Math.max(c.grace_min,1440);console.log(JSON.stringify({config:c}))})" "$SCORER_URL" "$SCORER_HASH")
@@ -195,7 +198,8 @@ deploy)
   else
     near contract deploy "$APP" use-file "$WASM" with-init-call new json-args "$(config_json 1440)" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet "${SIGN[@]}" 2>&1 | grep -E "Transaction ID|Error"
   fi
-  sleep 3; log "config: $(view get_config '{}' 2>&1 | head -c 400)"
+  sleep 3; log "config: $(view get_config '{}' 2>&1 | head -c 600)"
+  log "free balance after: $(view free_balance '{}' 2>&1 | head -c 100)"
   ;;
 
 e2e)
