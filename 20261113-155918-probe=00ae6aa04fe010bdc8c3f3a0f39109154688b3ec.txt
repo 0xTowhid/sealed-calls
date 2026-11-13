@@ -1,0 +1,7 @@
+=== probe=00ae6aa04fe010bdc8c3f3a0f39109154688b3ec  commit ae7790796caf365caae106a53bfd39c911e99f54  Fri Nov 13 15:59:18 UTC 2026
+[15:59:22] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[15:59:22] probe https://raw.githubusercontent.com/0xTowhid/sealed-calls/00ae6aa04fe010bdc8c3f3a0f39109154688b3ec/scorer.wasm (0ecece80a9290026ce5c2755e8c2961631c937cf35771e26811c30818d1e5a78)
+    │    Transaction ID: 5tKnqFyv66eyRgxwkhx8PUN5g5knRRp4rFVh3Nw8eHRV
+    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","code_source":{"WasmUrl":{"url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/00ae6aa04fe010bdc8c3f3a0f39109154688b3ec/scorer.wasm","hash":"0ecece80a9290026ce5c2755e8c2961631c937cf35771e26811c30818d1e5a78","build_target":"wasm32-wasip2"}},"resources_used":{"instructions":3295709,"time_ms":2108,"compile_time_ms":null},"success":true,"error_message":null,"payment_charged":"1210800300000000000000","payment_refunded":"98789199700000000000000","compilation
+    Function execution return value (printed to stdout):
+      "error": null,
