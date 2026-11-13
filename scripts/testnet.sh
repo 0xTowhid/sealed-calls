@@ -165,6 +165,9 @@ floor)  # floor=<usd>: set the DEX liquidity floor in the contract config (no up
   ;;
 
 diag)  # diag=<account>: OutLayer logs of that account's latest score_signals transactions (read-only)
+  log "outlayer health: $(curl -s https://testnet-api.outlayer.ai/health | head -c 300)"
+  log "outlayer stats: $(curl -s https://testnet-api.outlayer.ai/public/stats | head -c 400)"
+  log "outlayer workers: $(curl -s https://testnet-api.outlayer.ai/public/workers | head -c 1500)"
   for H in $(curl -s "https://api-testnet.nearblocks.io/v1/account/$ARG/txns?method=score_signals&per_page=2" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const t of JSON.parse(s).txns||[])console.log(t.transaction_hash)})"); do
     log "tx $H"
     curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"EXPERIMENTAL_tx_status\",\"params\":{\"tx_hash\":\"$H\",\"sender_account_id\":\"$MAIN\",\"wait_until\":\"FINAL\"}}" \
