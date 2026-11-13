@@ -1,13 +1,8 @@
-=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Thu Nov 12 23:50:27 UTC 2026
-[23:50:30] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[23:50:33] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           9.791748376053395907407428 NEAR 
-[23:50:38] settle channel 0 period 4 (held 14285714285714285714284)
-    │    Transaction ID: F4yESLEUwDFEegCxnyD6YeiinR6hJMGvrGKtd5tqNkhG
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":4,"signals":0,"score_bps":0,"released":false,"held":"14285714285714285714284"}]}
-    Function execution return value (printed to stdout):
-[23:50:44]    period 4: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"14285714285714285714284","settled_at_ms":1794527441028}
-[23:50:45] period 5 has not ended yet (current 5)
-[23:50:48] period 4 has not ended yet (current 4)
-[23:50:51] period 4 has not ended yet (current 4)
-[23:50:53] period 2 has not ended yet (current 2)
-[23:50:53] keeper done
+=== keep  commit 157285eea36f297d4fab6398db5cf9071dd150f5  Fri Nov 13 06:24:29 UTC 2026
+[06:24:32] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[06:24:35] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           9.791436798614582707407428 NEAR 
+[06:24:37] period 5 has not ended yet (current 5)
+[06:24:38] period 4 has not ended yet (current 4)
+[06:24:40] period 4 has not ended yet (current 4)
+[06:24:42] period 2 has not ended yet (current 2)
+[06:24:42] keeper done
