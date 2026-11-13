@@ -32,8 +32,8 @@ You need a NEAR **testnet** wallet ([MyNearWallet](https://testnet.mynearwallet.
 2. Click a creator → the channel page shows the score, a chart of results call by call, and **Every call**: ended calls with entry, TPs, SL, outcome and result; live calls appear as **Sealed call** with a countdown. Filter with All / Won / Lost / Sealed.
 3. Click **Connect wallet** (top right) and sign in with your testnet account → the top bar shows your account and balance.
 4. On a channel, pick a plan and click **Subscribe** → your wallet asks to send the plan price (+0.05 NEAR storage, mostly refunded). After it confirms, the box says **Your subscription · active until …**.
-5. Open **Feed** → click **Set up this browser** (one transaction that stores your browser's public key) → from now on, calls posted to that channel appear in your feed decrypted, while the channel page still shows them sealed to everyone else.
-6. As a creator: open **Creator desk** → create a channel (name, prices, which markets you post) → in **New signal** type `ETH`, pick the Hyperliquid market, choose long/short and leverage, fill the buy range, TP1, SL and validity (e.g. 15 minutes), click **Seal and post** → the call appears on your channel as a sealed row with a countdown, and in your subscribers' feeds in clear text.
+5. Open **Feed** → click **Set up this browser** (one transaction that stores your browser's public key; attaches 0.01 NEAR for its storage, the rest refunded) → from now on, calls posted to that channel appear in your feed decrypted, while the channel page still shows them sealed to everyone else.
+6. As a creator: open **Creator desk** → create a channel (name, prices, which markets you post) → in **New signal** type `ETH`, pick the Hyperliquid market, choose long/short and leverage, fill the buy range, TP1, SL and validity (e.g. 15 minutes), click **Seal and post** → the call appears on your channel as a sealed row with a countdown, and in your subscribers' feeds in clear text. Under **Late subscribers**, **Add 0.1 NEAR** of storage credit lets the desk share live calls with people who subscribe after you posted.
 7. After the validity ends → the call opens for everyone (any visitor can click **Reveal now**; a keeper also does it), shows an "est." result replayed in the browser, and then the official OutLayer result once scored.
 
 Without a wallet you can still do steps 1–2, and preview any account read-only by adding `?viewas=<account>.testnet` to the URL (e.g. `?viewas=to69.testnet#/feed`).
@@ -47,11 +47,11 @@ git clone https://github.com/0xTowhid/sealed-calls && cd sealed-calls
 
 # 1. Contract: channels, plans, 50/50 escrow, sealing, reveal, late access, kinds, scoring callbacks, settlement, refunds
 cd contract && cargo test && cd ..
-# see: "test result: ok. 41 passed"
+# see: "test result: ok. 58 passed"
 
 # 2. Scorer: fills, TP/SL on closes, leverage + liquidation on wicks, shorts, fees, DEX price impact, micro-cap rules
 cd scorer && cargo test && cd ..
-# see: "test result: ok. 13 passed"
+# see: "test result: ok. 15 passed"
 
 # 3. Read the live contract on testnet
 cd scripts && npm install
@@ -113,19 +113,26 @@ Other building blocks: drand quicknet timelock (tlock) for the public copy, X255
 - **Exits:** a take-profit when a close crosses it (TPs close equal parts); the stop loss when a close crosses it; anything still open exits at the last close of the validity window.
 - **Leverage:** chosen per call (Hyperliquid 1–50x, DEX tokens 1x spot buys). Liquidation if a candle's low (long) or high (short) crosses ≈ fill × (1 ∓ 1/leverage) → −100%.
 - **Costs:** Hyperliquid taker fee on each side × leverage; DEX tokens pay the pool fee plus the price impact of a $500 trade on each side.
-- **DEX pools:** only pools paired with a major coin (SOL, ETH, USDC, USDT, USDG, …) that existed before the post, with ≥ $100k liquidity. **Micro-cap mode** (labelled and ranked separately) accepts pools from $10k with stricter rules: a TP needs two consecutive closes beyond it, and an expiring position exits at the median of the last 30 minutes.
+- **DEX pools:** only pools paired with a major coin that existed before the post. On Solana, Ethereum, Base, BSC and Arbitrum the quote token is checked by **address** (a token merely named "USDC" doesn't count); other networks (e.g. Robinhood Chain: USDG) by symbol. The candles, the ≥ $100k liquidity floor and the costs all use **the same pool**: the deepest one that existed at the post. **Micro-cap mode** (labelled and ranked separately) accepts pools from $10k with stricter rules: a TP needs two consecutive closes beyond it, and an expiring position exits at the median of the last 30 minutes.
 - **Candles:** the finest still available (1-minute for recent calls; coarser for older ones; the size is shown in the outcome).
-- Results are clipped to −100%…+300%. A call never revealed after the grace period, or a revealed text that is not a valid call, scores −100%.
-- **Period score** `S = Σr / (n + 5)`: five phantom flat calls, so a couple of lucky trades can't beat a long steady record. A period settles once every call posted in it has ended.
+- Results are clipped to −100%…+300%. A call never revealed within the 24-hour grace period, or a revealed text that is not a valid call, scores −100%.
+- **Calls count in the period they end in**, so a long call never holds up the settlement (and refunds) of earlier periods.
+- **Payout rule:** a period's held half goes to the trader when its calls' total is positive (Σr > 0) over at least `min_signals` calls that actually filled (calls that never fill can't pad the count); otherwise subscribers claim it back.
+- **Displayed score** `S = Σr / (n + 5)`: five phantom flat calls dampen a few lucky trades (a single +300% call still shows +50%).
 
 ## Honest limits
+
+A full audit was done on Nov 13 ([`AUDIT.md`](AUDIT.md)); every finding was fixed except the limits below.
 
 - Results are replays on public candles, not executed trades.
 - The demo contract settles **daily** so results appear before the deadline; a production version would settle weekly.
 - Subscribers can leak decrypted calls and creators can trade against subscribers; neither is prevented. The public record is the deterrent.
 - Late subscribers receive live calls only while the creator's desk is open in a browser that holds the creator key.
 - Each call is wrapped to every active subscriber, so a channel is capped at 100 subscribers.
-- The contract owner can point to a new scorer build (URL + sha256 are public in `get_config`); a production version would put that behind a DAO.
+- **Owner powers.** Config changes (scorer build, limits) wait 24 hours (`set_config` → `pending_config` → `apply_config`, shown in the app), and the OutLayer account and period length can't change. But `app.to69.testnet` still has a full-access key so the code can be fixed during the hackathon; before any real money it must be locked (key deleted) or handed to a DAO.
+- **DEX liquidity is read when a call is scored, not when it was posted** (free APIs have no history of pool depth). The floor and costs now use the same pool as the candles, but a trader who controls a thin pool could still add liquidity just before scoring. Micro-cap rules (two closes for a TP, median exit) make pushing a price harder, not impossible. Perp (Hyperliquid) scoring doesn't have this problem.
+- **The payout is all-or-nothing on Σr > 0**, and results clip at −100%/+300% with up to 50x leverage, so a high-variance call can flip a period. Raising `min_signals` reduces this; a risk-adjusted payout is future work.
+- What subscribers decrypt can't be checked by the contract. The app checks it against the on-chain commitment and shows a red "don't trade this" warning on a mismatch.
 - A new account starts with an empty record; history follows the account, not the channel.
 - GitHub's scheduler can run the keeper late or skip runs; anyone can reveal, score or settle from the app.
 
@@ -146,8 +153,8 @@ Other project by the same author, independent of this one: [Pixel Bazaar](https:
 
 | Path | What |
 | --- | --- |
-| `contract/` | NEAR contract and 41 unit tests |
-| `scorer/` | OutLayer scoring job (wasm32-wasip2) and 13 unit tests |
+| `contract/` | NEAR contract and 58 unit tests |
+| `scorer/` | OutLayer scoring job (wasm32-wasip2) and 15 unit tests |
 | `web/` | React app (Vite), deployed to GitHub Pages |
 | `scripts/` | `sc.mjs` (seal, open, view), `testnet.sh` (deploy, e2e, keeper, settle), `sample-signals.mjs` |
 | `gates/` | day-1 feasibility checks (tlock, prices, OutLayer, Sputnik DAO) |
