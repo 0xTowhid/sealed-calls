@@ -1,0 +1,4 @@
+=== diag=39121  commit 68f5e2e5da31aa2a1c522918c2bfb95b50a190a4  Fri Nov 13 15:26:32 UTC 2026
+[15:26:35] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+
+{"total_executions":93738,"successful_executions":88867,"failed_executions":2518,"access_denied_executions":1013,"compilation_failed_executions":686,"execution_failed_executions":336,"insufficient_payment_executions":9,"custom_executions":309,"total_instructions_used":22906256773192,"average_execution_time_ms":3579,"total_near_paid_yocto":"2816424793815670666998803108","unique_users":1339,"active_workers":4,"computed_at":"2026-11-13T15:26:19.568394861+00:00"}
