@@ -175,6 +175,14 @@ diag)  # diag=<account>: OutLayer logs of that account's latest score_signals tr
   done
   ;;
 
+probe)  # probe=<dist commit>: run that scorer build on OutLayer directly from MAIN (one 15-minute BTC call from 2 h ago)
+  URL="https://raw.githubusercontent.com/0xTowhid/sealed-calls/$ARG/scorer.wasm"; H=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+  T=$(( ($(date +%s) - 7200) * 1000 ))
+  IN=$(js "console.log(JSON.stringify(JSON.stringify({signals:[{id:0,venue:'hyperliquid',network:null,address:'BTC',side:'long',leverage:2,entry_low:'1',entry_high:'1000000',tps:['2000000'],sl:'0.5',posted_at_ms:$T,valid_min:15}],reference_usd:500,liquidity_floor_usd:100000})))")
+  log "probe $URL ($H)"
+  call "$MAIN" outlayer.testnet request_execution "{\"source\":{\"WasmUrl\":{\"url\":\"$URL\",\"hash\":\"$H\",\"build_target\":\"wasm32-wasip2\"}},\"resource_limits\":{\"max_instructions\":10000000000,\"max_memory_mb\":256,\"max_execution_seconds\":180},\"input_data\":$IN,\"response_format\":\"Json\"}" '0.1 NEAR' 300 | grep -vE "request_data" | cut -c1-600
+  ;;
+
 delete)  # delete=<account> (a sub-account of MAIN); its NEAR goes back to MAIN
   near account delete-account "$ARG" beneficiary "$MAIN" network-config testnet "${SIGN[@]}" 2>&1 | grep -iE "error|deleted" | head -3
   ;;
