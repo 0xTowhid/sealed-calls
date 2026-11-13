@@ -82,7 +82,7 @@ score_ended() {
   IDS=$(js "const now=Date.now();const c=require('/tmp/sigs.json').filter(s=>s.body&&s.r_bps==null&&typeof s.status==='object'&&s.status.Revealed&&now>=s.posted_at_ms+s.valid_min*60000).sort(()=>Math.random()-0.5);const dex=c.filter(s=>s.body.market.venue!=='hyperliquid').slice(0,3);const ids=c.filter(s=>s.body.market.venue==='hyperliquid').slice(0,10-dex.length).concat(dex).map(s=>s.id);console.log(ids.join(','))")
   if [ -n "$IDS" ]; then
     log "channel $CH: scoring signals [$IDS] on OutLayer"
-    call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | cut -c1-300
+    call "$MAIN" "$C" score_signals "{\"ids\":[$IDS]}" '0.3 NEAR' 300 | grep -E "EVENT_JSON|rror" | sed -E 's/"code_source":\{[^}]*\}\}?,?//' | cut -c1-1500
     for i in $(seq 1 12); do
       sleep 10
       LEFT=$(view list_signals "{\"channel\":$CH,\"limit\":100}" | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const want=[$IDS];console.log(JSON.parse(s).filter(x=>want.includes(x.id)&&x.r_bps==null).length)})")

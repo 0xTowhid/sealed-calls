@@ -26,7 +26,8 @@ fn main() {
 const TIME_BUDGET_S: u64 = 120;
 
 fn run() -> Result<(Vec<SignalScore>, Vec<u64>, Option<String>), String> {
-    let started = std::time::Instant::now();
+    // Wall clock, not Instant: the OutLayer runtime may not offer a monotonic clock.
+    let started_s = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let mut raw = String::new();
     io::stdin().read_to_string(&mut raw).map_err(|e| e.to_string())?;
     let job: JobIn = serde_json::from_str(&raw).map_err(|e| format!("bad input: {e}"))?;
@@ -42,7 +43,8 @@ fn run() -> Result<(Vec<SignalScore>, Vec<u64>, Option<String>), String> {
     };
     let (mut results, mut failed, mut first_err) = (vec![], vec![], None);
     for s in &job.signals {
-        if started.elapsed().as_secs() > TIME_BUDGET_S {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        if now.saturating_sub(started_s) > TIME_BUDGET_S {
             failed.push(s.id);
             first_err.get_or_insert_with(|| "time budget used up".to_string());
             continue;
