@@ -1,0 +1,11 @@
+=== deploy  commit 5bfe8a9704f2b5bba78f5eee614de1dd2d2e43c4  Fri Nov 13 14:35:47 UTC 2026
+[14:35:51] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-embed-abi
+[14:36:23] wasm sha256 e1925b02e9a374cacd80a6730ef1af9a864365b95073f661916a3470d98644cf
+[14:36:23] code needs about 4.4 NEAR of storage
+[14:36:24] upgrading existing v2 contract (state kept); pointing it at the current scorer (TOPUP=<n> also sends n NEAR for storage)
+[14:36:28] free balance before: 1182975937639661599999980
+│    Transaction ID: 6GdCLsxtScHESJuZiczApcAtzAabzD14sEoDb9PjUEMU
+[14:36:36] config: {"owner":"to69.testnet","period_minutes":1440,"grace_min":1440,"min_signals":1,"max_signals_per_day":10,"scorer_wasm_url":"https://raw.githubusercontent.com/0xTowhid/sealed-calls/69b7721110df67d09210edee7712ff08e1a2a52b/scorer.wasm","scorer_wasm_hash":"6451c411b938af4dee3580b8d5be5edb7b3a3769a5e00e15d5b4e58558d8f9b9","outlayer":"outlayer.testnet","reference_usd":500,"liquidity_floor_usd":100000}
+[14:36:37] free balance after: 1179871631821372799999980
