@@ -1,0 +1,17 @@
+[07:51:55] channel 3, live sealed call 8
+[07:51:56] m1.to69.testnet subscribes: plan 0 (7 days, 100000000000000000000000 yocto), attaching 0.1300 NEAR
+    │    Transaction ID: FydesFEqZKtpMAfPum8bFpm4iX6ghgQoijCTSBsumgua
+[07:52:02] m1.to69.testnet registers a fresh reading key
+    │    Transaction ID: Dckyea1PUXp3nT7eoMA7wzsBrHKbFFyMz2jzbhTQ5Xu7
+[07:52:07] waiting for the creator's desk to share call 8 with m1.to69.testnet (open the desk, storage credit > 0)
+[08:01:48] shared
+[08:01:48] member key opens it (hash checked)
+[08:01:48] recording
+ffmpeg_start 1794643310748
+mark channel 1794643318985
+mark channel_sealed_row 1794643322362
+mark feed_load 1794643327370
+mark feed_opened 1794643330677
+mark end 1794643346326
+-rw-r--r-- 1 runner runner 2243900 Nov 14 08:02 /tmp/sub.mkv
+[08:02:26] encrypted recording ready
