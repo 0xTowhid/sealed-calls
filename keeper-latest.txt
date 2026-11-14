@@ -1,18 +1,8 @@
-=== keep  commit 7eb856ec9ae570d2ee77c4e5345bebe1c0ace0a9  Fri Nov 13 21:22:45 UTC 2026
-[21:22:48] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[21:22:51] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.454914896338122707407428 NEAR 
-[21:22:55] settle channel 0 period 5 (held 14285714285714285714284)
-    │    Transaction ID: HqdTgFMtz634rYK3ufNciCsTQgQeqVy9uuB5DhueJKhy
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":5,"signals":0,"score_bps":0,"released":false,"held":"14285714285714285714284"}]}
-    Function execution return value (printed to stdout):
-[21:23:00]    period 5: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"14285714285714285714284","settled_at_ms":1794604976635}
-[21:23:00] period 6 has not ended yet (current 6)
-[21:23:03] period 5 has not ended yet (current 5)
-[21:23:05] period 5 has not ended yet (current 5)
-[21:23:10] settle channel 3 period 2 (held 7142857142857142857142)
-    │    Transaction ID: 2ZPTWWEptKQWD3k3zB5zLRm7gkJiv5RfZ3iyjN2KuYYM
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":2,"signals":0,"score_bps":0,"released":false,"held":"7142857142857142857142"}]}
-    Function execution return value (printed to stdout):
-[21:23:14]    period 2: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"7142857142857142857142","settled_at_ms":1794604991299}
-[21:23:15] period 3 has not ended yet (current 3)
-[21:23:15] keeper done
+=== keep  commit 7eb856ec9ae570d2ee77c4e5345bebe1c0ace0a9  Sat Nov 14 01:41:15 UTC 2026
+[01:41:19] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[01:41:21] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.452304648659706607407428 NEAR 
+[01:41:25] period 6 has not ended yet (current 6)
+[01:41:27] period 5 has not ended yet (current 5)
+[01:41:31] period 5 has not ended yet (current 5)
+[01:41:34] period 3 has not ended yet (current 3)
+[01:41:34] keeper done
