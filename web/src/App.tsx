@@ -5,6 +5,8 @@ import { nearNum, slug } from "./format";
 import { Avatar } from "./ui";
 import { CONTRACT, CONTRACT_OVERRIDDEN, EXPLORER } from "./config";
 import { Explore } from "./pages/Explore";
+// The landing page is the site's front door (no hash); every app page lives under "#/".
+const Landing = lazy(() => import("./pages/Landing").then((m) => ({ default: m.Landing })));
 // Pages that need the crypto libraries (drand timelock, libsodium) load on demand.
 const ChannelPage = lazy(() => import("./pages/Channel").then((m) => ({ default: m.ChannelPage })));
 const Feed = lazy(() => import("./pages/Feed").then((m) => ({ default: m.Feed })));
@@ -52,6 +54,7 @@ function Wallet({ account, hasChannel }: { account: string | null; hasChannel: b
 
 export default function App() {
   const route = useRoute();
+  const front = window.location.hash === "" || window.location.hash === "#";
   const account = useAccount();
   const channels = useLoad(listChannels, [], 60_000, "channels").data;
   const mine = channels?.filter((c) => c.creator === account) ?? [];
@@ -74,6 +77,7 @@ export default function App() {
     </nav>
   );
 
+  if (front) return <Suspense fallback={null}><Landing /></Suspense>;
   return (
     <>
       <header className="bar">

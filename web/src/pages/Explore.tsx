@@ -23,7 +23,7 @@ function kindsOf(tags: string[], signals: Signal[]): Set<Kind> {
   return shown.size ? shown : new Set<Kind>(["perp", "dex", "micro"]);
 }
 
-async function loadAll(): Promise<{ cfg: Config; rows: Row[] }> {
+export async function loadAll(): Promise<{ cfg: Config; rows: Row[] }> {
   const [cfg, channels] = await Promise.all([getConfig(), listChannels()]);
   const tags = await channelTags(channels.map((c) => c.id));
   const rows = await Promise.all(
