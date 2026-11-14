@@ -1,46 +1,96 @@
 # Sealed Calls
 
-Paid trading-signal channels (like Telegram signal groups) where every call is sealed on NEAR when it is posted, opened to everyone when it ends, scored on real market candles, and where the creator receives the second half of each subscription only for periods in which their calls made money.
+**Paid trading calls that can't be deleted.** Every call is sealed on NEAR when it's posted, opens to everyone when it ends, and is scored on real market candles. The trader gets the second half of each subscription only for periods when their calls made money.
 
 Built for NEAR HACKATHON 2026 by Towhid ([@0xTowhid](https://x.com/0xTowhid)). Testnet only.
 
 | | |
-| --- | --- |
-| Live app | https://sealed-calls.vercel.app/ (mirror: https://0xtowhid.github.io/sealed-calls/) |
-| Contract | [`app.to69.testnet`](https://testnet.nearblocks.io/address/app.to69.testnet) (NEAR testnet) |
-| Scoring | OutLayer job on `outlayer.testnet`; wasm URL + sha256 readable from `get_config` |
-| Tracks | Open Innovation (`open`), Privacy & Private AI (`privacy`), Social Money (`social`) |
-| Other project by the same author | [Pixel Bazaar](https://github.com/0xTowhid/pixel-bazaar), an independent game, submitted separately |
+| :--- | :--- |
+| **Live app** | https://sealed-calls.vercel.app/ (mirror: https://0xtowhid.github.io/sealed-calls/) |
+| **Contract** | [`app.to69.testnet`](https://testnet.nearblocks.io/address/app.to69.testnet) on NEAR testnet |
+| **Scoring** | OutLayer job on `outlayer.testnet`; its wasm URL and sha256 are readable from `get_config` |
+| **Tracks** | Open Innovation (`open`), Privacy & Private AI (`privacy`), Social Money (`social`) |
+| **Other project** | [Pixel Bazaar](https://github.com/0xTowhid/pixel-bazaar), an independent game, submitted separately |
 
 ## The problem
 
-Paid signal groups sell access to a trader's calls, but the trader controls the record. Losing calls get deleted or edited, entries get "adjusted" after the fact, and screenshots of winners are all a buyer can check. Subscribers pay up front whether the calls work or not.
+Paid signal groups sell access to a trader's calls, but the trader controls the record:
+
+- losing calls get deleted or edited,
+- entries get "adjusted" after the fact,
+- screenshots of winners are all a buyer can check,
+- subscribers pay up front whether the calls work or not.
 
 ## What Sealed Calls does
 
-- **A call cannot be changed or hidden.** When a creator posts, the contract stores a sha256 commitment of the call. The text itself is encrypted: subscribers active at that moment can decrypt it at once in their browser; a second copy is timelocked with drand and opens for everyone when the call's validity ends. Anyone can then reveal it, and the contract checks it against the commitment.
-- **Every call is scored the same way.** When a call ends, an OutLayer job replays it on public candles (Hyperliquid for perps, GeckoTerminal for DEX tokens on any chain): fill inside the entry range, take-profits and stop loss on candle closes, leverage and liquidation, fees and DEX price impact for a $500 trade. The result is written to the contract and shown on the creator's public page.
-- **Payment follows results.** 50% of a subscription goes to the creator immediately. The other 50% is held by the contract and split over the periods the subscription covers. When a period settles, the creator receives that period's held half if their score for it is positive; otherwise each subscriber can claim their slice back.
+| | |
+| :--- | :--- |
+| **A call can't be changed or hidden** | The contract stores a sha256 commitment of the call. Subscribers active at that moment decrypt it at once in their browser; a timelocked copy (drand) opens for everyone when the call ends. Anyone can reveal it, and the contract checks it against the commitment. |
+| **Every call is scored the same way** | When a call ends, an OutLayer job replays it on public candles (Hyperliquid for perps, GeckoTerminal for DEX tokens): entry fill, take-profits, stop loss, leverage, liquidation, fees and price impact for a $500 trade. The result is written to the contract. |
+| **Payment follows results** | 50% of a subscription goes to the trader at once. The other 50% is held and split over the periods it covers. Each period, the trader gets that slice only if their calls made money; otherwise subscribers claim it back. |
 
-What we claim, and only this: calls cannot be edited, deleted or hidden, and become public when they end. Results are indicative replays on public candles, not executed trades. Sealed Calls does not stop a creator trading against subscribers or a subscriber leaking calls; it makes the record public and pays the creator in full only when calls work.
+> **What we claim, and only this:** calls can't be edited, deleted or hidden, and become public when they end. Results are indicative replays on public candles, not executed trades. Sealed Calls doesn't stop a trader trading against subscribers or a subscriber leaking calls; it makes the record public and pays the trader in full only when calls work.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    T["Trader<br/>creator desk"] -->|"post_signal<br/>commitment + keys + timelock copy"| C
+    T -->|"share_signals<br/>late subscribers"| C
+    S["Subscriber<br/>browser key"] -->|"subscribe, register_key,<br/>claim_refund"| C
+    D["drand quicknet"] -.->|"timelock opens<br/>when the call ends"| K
+    K["Keeper or<br/>any visitor"] -->|"reveal, score_signals,<br/>settle"| C
+    C["Contract<br/>app.to69.testnet"] -->|"request_execution"| O["OutLayer TEE<br/>scorer.wasm"]
+    O -->|"candles over HTTPS"| P["Hyperliquid<br/>GeckoTerminal"]
+    O -.->|"results via yield/resume"| C
+```
+
+## The life of a call
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Sealed: trader posts
+    Sealed --> Revealed: validity ends, drand copy opens, anyone reveals
+    Sealed --> Unrevealed: not revealed within the 24 h grace
+    Revealed --> Scored: OutLayer replays it on candles
+    Unrevealed --> Scored: counts as -100%
+    Scored --> [*]
+```
+
+While a call is **Sealed**, the public record shows a locked row with a countdown, and only subscribers (decrypting in their own browser) see the levels.
+
+## Where the money goes
+
+```mermaid
+flowchart LR
+    Sub["Subscription<br/>e.g. 0.1 NEAR / week"] --> Now["50% to the trader now"]
+    Sub --> Held["50% held,<br/>split by period"]
+    Held --> Q{"Period's calls<br/>made money?"}
+    Q -->|"yes: Σr > 0 over ≥ min_signals filled calls"| TT["Trader gets the slice"]
+    Q -->|"no, or no filled calls"| RR["Subscribers claim it back"]
+```
 
 ## Try it: live app (5 minutes, browser only)
 
 You need a NEAR **testnet** wallet ([MyNearWallet](https://testnet.mynearwallet.com) or Meteor) with a little testnet NEAR from [near-faucet.io](https://near-faucet.io).
 
-1. Open https://sealed-calls.vercel.app/ → the landing page: scroll and the sealed envelope opens, showing the latest real scored call; the stats are live from the contract. Click **Open app** (or go to https://sealed-calls.vercel.app/#/) → **Explore** shows totals read from the contract (calls posted, traders, subscribers, NEAR paid to traders and returned to subscribers) and a leaderboard of creators.
-2. Click a creator → the channel page shows the score, a chart of results call by call, and **Every call**: ended calls with entry, TPs, SL, outcome and result; live calls appear as **Sealed call** with a countdown. Filter with All / Won / Lost / Sealed.
-3. Click **Connect wallet** (top right) and sign in with your testnet account → the top bar shows your account and balance.
-4. On a channel, pick a plan and click **Subscribe** → your wallet asks to send the plan price (+0.05 NEAR storage, mostly refunded). After it confirms, the box says **Your subscription · active until …**.
-5. Open **Feed** → click **Set up this browser** (one transaction that stores your browser's public key; attaches 0.01 NEAR for its storage, the rest refunded) → from now on, calls posted to that channel appear in your feed decrypted, while the channel page still shows them sealed to everyone else.
-6. As a creator: open **Creator desk** → create a channel (name, prices, which markets you post) → in **New signal** type `ETH`, pick the Hyperliquid market, choose long/short and leverage, fill the buy range, TP1, SL and validity (e.g. 15 minutes), click **Seal and post** → the call appears on your channel as a sealed row with a countdown, and in your subscribers' feeds in clear text. Under **Late subscribers**, **Add 0.1 NEAR** of storage credit lets the desk share live calls with people who subscribe after you posted.
-7. After the validity ends → the call opens for everyone (any visitor can click **Reveal now**; a keeper also does it), shows an "est." result replayed in the browser, and then the official OutLayer result once scored.
+| # | Do | See |
+| :-: | :--- | :--- |
+| 1 | Open https://sealed-calls.vercel.app/ and scroll | The landing page: the envelope opens on the latest real scored call; the numbers are live from the contract |
+| 2 | Click **Open app** (or open `/#/`) | **Explore**: totals from the contract and a leaderboard of traders |
+| 3 | Click a trader | Their channel: score, result chart and **Every call** (ended calls with levels and result; live ones as **Sealed call** with a countdown) |
+| 4 | Click **Connect wallet**, sign in | Your account and balance in the top bar |
+| 5 | On a channel, pick a plan, click **Subscribe** | The wallet asks for the plan price (+0.05 NEAR storage, mostly refunded); then **Your subscription · active until …** |
+| 6 | Open **Feed**, click **Set up this browser** (0.01 NEAR) | New calls from that channel appear decrypted here, with **✓ Same signal that's locked on-chain**, while the channel still shows them sealed |
+| 7 | Open **Creator desk**, create a channel, then in **New signal** type `ETH`, pick the Hyperliquid market, fill side, leverage, buy range, TP1, SL, validity (e.g. 15 min), click **Seal and post** | A sealed row with a countdown on your channel; clear text in your subscribers' feeds. **Add 0.1 NEAR** under Late subscribers lets the desk share live calls with people who subscribe later |
+| 8 | Wait for the validity to end | The call opens for everyone (**Reveal now**, or the keeper does it), shows an "est." result, then the official OutLayer result |
 
-Without a wallet you can still do steps 1–2, and preview any account read-only by adding `?viewas=<account>.testnet` to the URL (e.g. `?viewas=to69.testnet#/feed`).
+Without a wallet you can still do steps 1–3, and preview any account read-only with `?viewas=<account>.testnet` (e.g. `?viewas=to69.testnet#/feed`).
 
 ## Try it: from source (no keys needed)
 
-Prerequisites: Rust (stable, tested with 1.97) and Node.js 20 or newer.
+**Prerequisites:** Rust (stable, tested with 1.97) and Node.js 20 or newer.
 
 ```bash
 git clone https://github.com/0xTowhid/sealed-calls && cd sealed-calls
@@ -66,7 +116,7 @@ cd web && npm install && npm run dev
 # open the printed http://localhost:5173/ → the same Explore page as the live app
 ```
 
-Optional, the scoring job itself on live prices (needs the `wasm32-wasip2` target and [wasmtime](https://wasmtime.dev)):
+**Optional:** run the scoring job itself on live prices (needs the `wasm32-wasip2` target and [wasmtime](https://wasmtime.dev)):
 
 ```bash
 rustup target add wasm32-wasip2
@@ -75,7 +125,7 @@ node scripts/sample-signals.mjs | wasmtime run -S http scorer/target/wasm32-wasi
 # see: {"ok":true,"results":[{"id":1,"r_bps":…,"outcome":…}, …, {"id":5,"r_bps":-10000,"outcome":"no_market"}]}
 ```
 
-Build the contract wasm: `cd contract && cargo near build non-reproducible-wasm --no-embed-abi` (needs [cargo-near](https://github.com/near/cargo-near)).
+**Build the contract wasm:** `cd contract && cargo near build non-reproducible-wasm --no-embed-abi` (needs [cargo-near](https://github.com/near/cargo-near)).
 
 ## The full loop on testnet (evidence)
 
@@ -115,8 +165,8 @@ Other building blocks: drand quicknet timelock (tlock) for the public copy, X255
 - **Costs:** Hyperliquid taker fee on each side × leverage; DEX tokens pay the pool fee plus the price impact of a $500 trade on each side.
 - **DEX pools:** only pools paired with a major coin that existed before the post. On Solana, Ethereum, Base, BSC and Arbitrum the quote token is checked by **address** (a token merely named "USDC" doesn't count); other networks (e.g. Robinhood Chain: USDG) by symbol. The candles, the ≥ $100k liquidity floor and the costs all use **the same pool**: the deepest one that existed at the post. **Micro-cap mode** (labelled and ranked separately) accepts pools from $10k with stricter rules: a TP needs two consecutive closes beyond it, and an expiring position exits at the median of the last 30 minutes.
 - **Candles:** the finest still available (1-minute for recent calls; coarser for older ones; the size is shown in the outcome).
-- Results are clipped to −100%…+300%. A call never revealed within the 24-hour grace period, or a revealed text that is not a valid call, scores −100%.
-- **Calls count in the period they end in**, so a long call never holds up the settlement (and refunds) of earlier periods.
+- **Clipping:** results are clipped to −100%…+300%. A call never revealed within the 24-hour grace period, or a revealed text that is not a valid call, scores −100%.
+- **Periods:** a call counts in the period it ends in, so a long call never holds up the settlement (and refunds) of earlier periods.
 - **Payout rule:** a period's held half goes to the trader when its calls' total is positive (Σr > 0) over at least `min_signals` calls that actually filled (calls that never fill can't pad the count); otherwise subscribers claim it back.
 - **Displayed score** `S = Σr / (n + 5)`: five phantom flat calls dampen a few lucky trades (a single +300% call still shows +50%).
 
@@ -124,7 +174,7 @@ Other building blocks: drand quicknet timelock (tlock) for the public copy, X255
 
 A full audit was done on Nov 13 ([`AUDIT.md`](AUDIT.md)); every finding was fixed except the limits below.
 
-- Results are replays on public candles, not executed trades.
+- **Replays, not trades.** Results are replays on public candles, not executed trades.
 - The demo contract settles **daily** so results appear before the deadline; a production version would settle weekly.
 - Subscribers can leak decrypted calls and creators can trade against subscribers; neither is prevented. The public record is the deterrent.
 - Late subscribers receive live calls only while the creator's desk is open in a browser that holds the creator key.
