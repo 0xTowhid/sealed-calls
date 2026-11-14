@@ -1,0 +1,57 @@
+name: demo-footage
+
+# Records a real subscriber (m1.to69.testnet) opening a live sealed call on the live site.
+# Run by pushing .github/demo-request (first line = channel name). See scripts/demo.sh.
+# The recording is encrypted to .github/demo.pub.pem and pushed to the `demo-out` branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/demo-request"]
+
+permissions:
+  contents: write
+
+concurrency: { group: testnet, cancel-in-progress: false }
+
+env:
+  MAIN: to69.testnet
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 20 }
+      - name: cache NEAR tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with: { path: "~/.cargo/bin/near\n~/.cargo/bin/cargo-near", key: near-tools-v2-cli0.31.1-cn0.23.0 }
+      - name: install near-cli-rs
+        run: |
+          command -v near && exit 0
+          for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/download/v0.31.1/near-cli-rs-installer.sh | sh && exit 0; sleep 20; done
+          sudo apt-get update -qq && sudo apt-get install -y -qq libudev-dev pkg-config
+          cargo install near-cli-rs --version 0.31.1 --locked
+      - name: install browser + recorder
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb ffmpeg fonts-noto-color-emoji
+          cd scripts && npm install --silent && npm install --no-save --silent playwright@1.48.2 && npx playwright install --with-deps chromium
+      - name: record
+        env:
+          SK: ${{ secrets.NEAR_PRIVATE_KEY }}
+        run: |
+          [ -n "$SK" ] || { echo "NEAR_PRIVATE_KEY secret is not set"; exit 1; }
+          PUBKEY=$(SK="$SK" node scripts/pubkey.mjs) || exit 1
+          export PUBKEY
+          CHNAME="$(head -1 .github/demo-request)" bash scripts/demo.sh 2>&1 | tee demo-log.txt
+          mkdir -p out/demo && cp demo-log.txt out/demo/
+      - name: publish
+        if: always()
+        run: |
+          git config --global user.name "sealed-calls-ci"; git config --global user.email "ci@users.noreply.github.com"
+          REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          rm -rf pub && mkdir pub && cd pub && git init -q -b demo-out
+          cp ../out/demo/* . 2>/dev/null || true
+          git add -A && git commit -q -m "demo footage (encrypted)" && git push -qf "$REPO" demo-out
