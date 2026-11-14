@@ -101,7 +101,7 @@ export default function App() {
     <>
       <header className="bar">
         <div className="bar-in">
-          <a className="logo" href="#/"><i /><span>Sealed Calls</span></a>
+          <a className="logo" href={window.location.pathname} title="Sealed Calls home"><i /><span>Sealed Calls</span></a>
           {nav("tabs")}
           <div className="bar-r">
             <a className="chip net" href={`${EXPLORER}/address/${CONTRACT}`} target="_blank" rel="noreferrer" title={`Contract ${CONTRACT}`}><span className="dot" />NEAR Testnet</a>
