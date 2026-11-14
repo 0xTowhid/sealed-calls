@@ -192,9 +192,8 @@ There is no pre-hackathon code. The repository's first commit is 2026-11-06 (aft
 
 Other project by the same author, independent of this one: [Pixel Bazaar](https://github.com/0xTowhid/pixel-bazaar). No other chain is integrated: Hyperliquid and GeckoTerminal are read-only price sources for scoring.
 
-## Third-party code and AI use
+## Third-party code 
 
-- **AI-generated code:** most of the code, tests and docs were written with Claude (Anthropic) under the author's direction and review; ChatGPT was used for research.
 - Contract and job: [near-sdk-rs](https://github.com/near/near-sdk-rs), [wasi-http-client](https://crates.io/crates/wasi-http-client), serde; patterns from [OutLayer's proxy-contract tutorial](https://github.com/fastnear/near-outlayer/blob/main/wasi-examples/PROXY_CONTRACTS_TUTORIAL.md).
 - Web: React, Vite, [near-wallet-selector](https://github.com/near/wallet-selector), [tlock-js](https://github.com/drand/tlock-js), [libsodium.js](https://github.com/jedisct1/libsodium.js), Geist and Geist Mono fonts (fontsource).
 - Data: [Hyperliquid info API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint) and [GeckoTerminal API](https://www.geckoterminal.com/dex-api) for candles and scoring; [DexScreener API](https://docs.dexscreener.com/api/reference) for token search and live prices in the app; [drand](https://drand.love) quicknet.
