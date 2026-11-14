@@ -1,0 +1,18 @@
+
+=== token DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+1. pools listed: 20, paired with SOL/USDC: 15
+   5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9  liq $248,959  created 2023-07-05T14:41:09Z  dex orca
+   31p1hptjhFo6ZD8oBqkfutNXQKGGPyi7YcEAfsyKW777  liq $221,921  created 2025-07-17T15:51:09Z  dex meteora
+   AtcGozT6i1GR3wJAjVwRwmt7qbHqZrBUqKs2DcMAKoVe  liq $175,481  created 2024-03-19T03:11:43Z  dex meteora
+   pool_created_at present on all eligible pools: OK
+2. 120 1m candles over 124 min; missing minutes: 5; zero-volume candles: 0
+   => empty minutes are OMITTED (scorer must forward-fill)
+   newest close $0.0000025771903244074674 at 2026-11-14T08:08:00.000Z
+3. candles 72 h back via before_timestamp: OK 2026-11-11T08:09:00.000Z
+4. free trades endpoint: 88 trades over 1373 min (info only)
+5. Jupiter sell ~$500: out 500.7567 USDC, price impact 0.0009034282061157803476594414% (optional)
+
+=== token EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm
+FAIL: http 429 https://api.geckoterminal.com/api/v2/networks/solana/tokens/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm/pools
+
+GATE (d) PASS — pool selection, minute candles and 72 h history work. Note the gap behaviour above.

@@ -1,0 +1,23 @@
+[1m[92m   Compiling[0m scorer v0.2.0 (/home/runner/work/sealed-calls/sealed-calls/scorer)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.51s
+[1m[92m     Running[0m unittests src/lib.rs (target/debug/build/scorer/11b257a9dd9dc4e2/out/scorer-11b257a9dd9dc4e2)
+
+running 15 tests
+test tests::coarse_candles_are_labelled ... ok
+test tests::floor_and_costs_use_the_pool_the_candles_come_from ... ok
+test tests::dex_costs ... ok
+test tests::interval_choice ... ok
+test tests::not_filled_scores_zero_and_results_are_clipped ... ok
+test tests::leverage_multiplies_and_liquidation_uses_wicks ... ok
+test tests::fills_only_inside_the_range_at_any_time ... ok
+test tests::micro_caps_need_two_closes_for_a_tp_and_exit_on_the_median ... ok
+test tests::parses_sources ... ok
+test tests::shorts_mirror_longs ... ok
+test tests::take_profits_close_equal_parts_and_sl_closes_the_rest ... ok
+test tests::tps_and_sl_use_closes_not_wicks ... ok
+test tests::window_keeps_complete_candles_inside_validity ... ok
+test tests::prices_print_six_significant_digits ... ok
+test tests::quote_tokens_by_address_on_known_networks ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

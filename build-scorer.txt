@@ -1,0 +1,6 @@
+[1m[92m   Compiling[0m idna v1.1.0
+[1m[92m   Compiling[0m url v2.5.8
+[1m[92m   Compiling[0m wasi-http-client v0.2.1
+[1m[92m   Compiling[0m scorer v0.2.0 (/home/runner/work/sealed-calls/sealed-calls/scorer)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 11.40s
+rustc 1.97.0 (2d8144b78 2026-07-07)

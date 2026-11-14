@@ -1,0 +1,20 @@
+• done
+
+• Building contract
+ │    Compiling sealed-calls v0.2.0 (/home/runner/work/sealed-calls/sealed-calls/contract)
+ │     Finished `release` profile [optimized] target(s) in 4.61s
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 1s 690ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/runner/work/sealed-calls/sealed-calls/contract/target/near/sealed_calls.wasm
+     -                  Size: 406.5 KB (406457 bytes)
+     - SHA-256 checksum hex : a596948b3529fbcd5b6b978fdf5b1f9a1eee6ff6ea4af75e0e2c6c0a315c0f4e
+     - SHA-256 checksum bs58: C9PSkqfShwtck2s4SJuMmpD5RkSEKNrM1zDLGDcWG8Hj
+     -                   ABI: /home/runner/work/sealed-calls/sealed-calls/contract/target/near/sealed_calls_abi.json
+     -          Embedded ABI: /home/runner/work/sealed-calls/sealed-calls/contract/target/near/sealed_calls_abi.zst
+    Finished cargo near build in 14s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm

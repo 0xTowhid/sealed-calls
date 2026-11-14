@@ -1,0 +1,11 @@
+drand chain: period=3s scheme=bls-unchained-g1-rfc9380 genesis=1692803367
+beacon received: {"round":33946802,"randomness":"a3f0f126ef04399842a420e77aaf1622331c03e9cc63e884ff88753ee336c185","signature":"b34c3e395660593b92b1f30ab9f0a88bb037e74ef33bd27c42dd29b24b3dc5ec3418f091b6a006a86b21cf4e1c534a74"}
+1. past round 33946802: decrypted and matches commitment -> OK
+   (refused as expected: It's too early to decrypt the ciphertext - decryptable at round 33946826)
+2. future round 33946826: refuses to decrypt early -> OK
+   ciphertext size: 694 bytes (stored on chain per call)
+   waiting 65 s for round 33946826...
+beacon received: {"round":33946826,"randomness":"2d87749dd730c23c2b68ff868e3ff51f2268f6385473c3e6e1a65b433f42e58d","signature":"8ba89ed351e08b7c0b224c122b4db1aa2b7745bcce95047b4009eef793e9c391b35033425681f33f6237a15f3ee2f054"}
+3. same round after it passed: opens and matches -> OK
+
+GATE (a) PASS
