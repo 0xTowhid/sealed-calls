@@ -243,13 +243,18 @@ export function ResultChart({ signals }: { signals: Signal[] }) {
   const y = (v: number) => pad + (1 - (v - lo) / span) * (H - 2 * pad);
   const line = ys.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
   const up = acc >= 0;
-  const col = up ? "#078B55" : "#DC3D4B";
+  const col = up ? "var(--gain)" : "var(--loss)";
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Cumulative result ${pct(acc)} over ${pts.length} calls`}>
-      <defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={up ? "#00EC97" : "#DC3D4B"} stopOpacity=".25" /><stop offset="1" stopColor={up ? "#00EC97" : "#DC3D4B"} stopOpacity="0" /></linearGradient></defs>
-      <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="#D7DCD9" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
+      <defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={up ? "var(--mint)" : "var(--loss)"} stopOpacity=".25" /><stop offset="1" stopColor={up ? "var(--mint)" : "var(--loss)"} stopOpacity="0" /></linearGradient></defs>
+      <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--line2)" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
       <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="url(#cg)" />
       <path d={line} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
     </svg>
   );
+}
+
+/** A small "i": the explanation shows on hover or tap instead of taking up the page. */
+export function Info({ tip }: { tip: string }) {
+  return <span className="info" tabIndex={0} role="note" aria-label={tip} data-tip={tip}>i</span>;
 }

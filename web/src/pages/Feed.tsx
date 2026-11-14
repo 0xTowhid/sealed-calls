@@ -5,7 +5,7 @@ import { costPct, near, price, sig, when } from "../format";
 import { loadMemberKey, memberOpen, newMemberKey, type Opened } from "../crypto";
 import { NEAR } from "../config";
 import { priceOf } from "../markets";
-import { Act, Countdown, LiveLine, MarketLinks, McapAtCall, Outcome, Result, SignalFace, rangeState } from "../ui";
+import { Act, Countdown, LiveLine, MarketLinks, McapAtCall, Outcome, Result, SignalFace, rangeState, Info } from "../ui";
 import type { Channel, Member, Signal } from "../types";
 import { isSealed, opensAt } from "../types";
 
@@ -91,7 +91,7 @@ export function Feed({ account }: { account: string | null }) {
         <section className="sheet">
           <h2>Money back</h2>
           {refund.length === 0 ? (
-            <p className="sub">Nothing to claim. When a creator's week isn't positive, the held half you paid for that week shows up here.</p>
+            <p className="sub">Nothing to claim.<Info tip="When a creator's period isn't positive, the held half you paid for it shows up here." /></p>
           ) : refund.map((s) => (
             <div key={s.ch.id} style={{ marginTop: 10 }}>
               <p className="bignum">{near(s.claim[0])}</p>

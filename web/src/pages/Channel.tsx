@@ -3,7 +3,7 @@ import { allSignals, call, signIn, claimable, currentPeriod, channelTags, getCha
 import { creatorRecord, record, useLoad, useNow } from "../data";
 import { channelPath, day, dur, near, nearNum, pct, periodWord, planName, price, when } from "../format";
 import { creatorSecret, openWithKey, signalKey, tlockOpen, roundTimeMs, type Opened } from "../crypto";
-import { Act, Avatar, KindPicker, KindTags, kindsShown, Countdown, LiveLine, McapAtCall, MicroTag, Outcome, Result, ResultChart, SideTag, rangeState, useLive } from "../ui";
+import { Act, Avatar, KindPicker, KindTags, kindsShown, Countdown, LiveLine, McapAtCall, MicroTag, Outcome, Result, ResultChart, SideTag, rangeState, useLive, Info } from "../ui";
 import { priceOf, venueLabel } from "../markets";
 import { CONTRACT, EXPLORER, GAS_300, NEAR } from "../config";
 import type { Channel, PeriodResult, Signal, SignalBody } from "../types";
@@ -107,7 +107,10 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               </div>
               <div className="act">
                 {isCreator ? (
-                  <a className="btn" href="#/desk">+ New call</a>
+                  <>
+                    <button className="btn ghost small" onClick={async () => { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? "Copied" : "Share"}</button>
+                    <a className="btn" href="#/desk">+ New call</a>
+                  </>
                 ) : (
                   <>
                     <button className="btn ghost small" onClick={async () => { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? "Copied" : "Share"}</button>
@@ -117,13 +120,11 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               </div>
             </div>
             {ch.about && <p className="about">{ch.about}</p>}
-            {isCreator && <ShareRow ch={ch} path={channelPath(ch, channels)} />}
             {isCreator && (
               <div className="money">
                 <div><b>{nearNum(ch.stats.earned).toLocaleString(undefined, { maximumFractionDigits: 3 })}</b><span>NEAR paid to you</span></div>
                 <div><b>{nearNum(heldAhead).toLocaleString(undefined, { maximumFractionDigits: 3 })}</b><span>NEAR held for coming {word}s</span></div>
                 <div><b className={ch.stats.periods_released ? "gain" : ""}>{ch.stats.periods_released}</b><span>{word}s earned of {ch.stats.periods_released + ch.stats.periods_refunded} settled</span></div>
-                <div><b>{subs} / {ch.max_members}</b><span>subscribers</span></div>
               </div>
             )}
             <div className="stats4">
@@ -133,13 +134,14 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               <div><span>Subscribers</span><b>{subs}</b><small>of {ch.max_members}</small></div>
             </div>
             {whole && (
-              <div className="whole">
-                <b>{isCreator ? "Your" : "This trader's"} full record, across {whole.per.length} channels</b>
-                <div className="row">
+              <details className="whole">
+                <summary className="whole-sum">
+                  <span>Across {whole.per.length} channels:</span>
                   <span><b>{whole.rec.signals}</b> calls</span>
                   <span>score <b className={cls(whole.rec.score_bps)}>{pct(whole.rec.score_bps)}</b></span>
                   <span><b>{whole.rec.periodsSettled ? `${whole.rec.periodsEarned} of ${whole.rec.periodsSettled}` : "—"}</b> {word}s paid</span>
-                </div>
+                  <span className="more">By channel</span>
+                </summary>
                 <table className="wk">
                   <thead><tr><th>Channel</th><th className="n">Calls</th><th className="n">Score</th><th className="n">{Word}s paid</th></tr></thead>
                   <tbody>
@@ -148,14 +150,13 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                     ))}
                   </tbody>
                 </table>
-                <div className="small ink3" style={{ marginTop: 8 }}>A new channel never hides an old record.</div>
-              </div>
+              </details>
             )}
           </section>
 
           <section className="panel chart">
             <div className="chart-h">
-              <h3>Result, call by call</h3><span className="sub0">each call's result added up, after fees</span>
+              <h3>Result, call by call<Info tip="Each call's result added up, after fees and leverage." /></h3>
               {rec.scored > 0 && <span className={`last ${cls(total)}`}>{pct(total)}</span>}
             </div>
             <ResultChart signals={signals} />
@@ -163,7 +164,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
 
           <section className="panel rec">
             <div className="rec-h">
-              <h3>Every call</h3><span className="sub0">permanent · newest first</span>
+              <h3>Every call<Info tip="Permanent, newest first. Results include fees and leverage. Fills, TPs and SL use candle closes; liquidation uses wicks. “est.” rows are replayed in your browser until OutLayer writes the official result." /></h3>
               <div className="chips" role="group" aria-label="Show">
                 {(["all", "won", "lost", "sealed"] as const).map((k) => (
                   <button key={k} aria-pressed={show === k} onClick={() => setShow(k)}>{{ all: "All", won: "Won", lost: "Lost", sealed: "Sealed" }[k]} <span className="ink3">{counts[k]}</span></button>
@@ -175,7 +176,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
             ) : (
               <div className="scroll">
                 <table className="record">
-                  <thead><tr><th>Market</th><th>Side</th><th>Entry · TP · SL</th><th>Outcome</th><th className="n">Result</th></tr></thead>
+                  <thead><tr><th>Side</th><th>Market</th><th>Outcome</th><th className="n">Result</th></tr></thead>
                   <tbody>
                     {shown.map((s) => {
                       const b = s.body;
@@ -188,20 +189,16 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                       );
                       return (
                         <tr key={s.id} className={isSealed(s) ? "sealed" : ""}>
+                          <td className="sidec">{b ? <SideTag b={b} /> : isSealed(s) ? <span className="lock" /> : <span className="ink3">—</span>}<span className="out-m">{b && s.r_bps == null && !isSealed(s) ? <LiveOutcome b={b} s={s} /> : outcome}</span></td>
                           <td className="mkc">
                             {b ? (
-                              <><b className="mk">{b.market.symbol}</b>{b.market.venue === "gecko_micro" && <> <MicroTag /></>}<span className="venue">{venueLabel(b.market)} · {when(s.posted_at_ms)} · valid {dur(s.valid_min)}</span><McapAtCall b={b} fill={s.fill_price} /></>
-                            ) : (
-                              <><b className="mk" style={{ display: "inline-flex", alignItems: "center" }}>{isSealed(s) ? <><span className="lock" />Sealed call</> : "—"}</b><span className="venue">{when(s.posted_at_ms)} · valid {dur(s.valid_min)}</span></>
-                            )}
-                          </td>
-                          <td className="sidec">{b ? <SideTag b={b} /> : <span className="ink3">—</span>}<span className="out-m">{b && s.r_bps == null && !isSealed(s) ? <LiveOutcome b={b} s={s} /> : outcome}</span></td>
-                          <td className="lvlc">
-                            {b ? (
-                              <div className="lvl"><i>{b.side === "short" ? "Sell" : "Buy"}</i>{price(b.entry_low)}–{price(b.entry_high)} · <i>TP</i>{b.tps.map(price).join(" / ")} · <i>SL</i>{price(b.sl)}</div>
+                              <><b className="mk">{b.market.symbol}</b>{b.market.venue === "gecko_micro" && <> <MicroTag /></>}<span className="venue">{venueLabel(b.market)} · {when(s.posted_at_ms)}</span>
+                                <span className="lvl"><i>{b.side === "short" ? "Sell" : "Buy"}</i>{price(b.entry_low)}–{price(b.entry_high)} · <i>TP</i>{b.tps.map(price).join(" / ")} · <i>SL</i>{price(b.sl)}</span><McapAtCall b={b} fill={s.fill_price} /></>
                             ) : isSealed(s) ? (
-                              <span className="sub0 small">{due ? "ended, opening" : <>opens in <Countdown to={opensAt(s)} now={now} /> · subscribers can read it now</>}</span>
-                            ) : <span className="ink3">—</span>}
+                              <><b className="mk">Sealed call</b><span className="venue">{due ? "ended, opening" : <>opens in <Countdown to={opensAt(s)} now={now} /> · subscribers see it now</>}</span></>
+                            ) : (
+                              <><b className="mk">—</b><span className="venue">{when(s.posted_at_ms)}</span></>
+                            )}
                           </td>
                           {b && s.r_bps == null && !isSealed(s) ? (
                             <LiveTds b={b} s={s} />
@@ -218,20 +215,25 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
                 </table>
               </div>
             )}
-            <p className="fine">Results include fees and leverage. Fills, TPs and SL use candle closes; liquidation uses wicks. “est.” rows are replayed in your browser on the same candles until OutLayer writes the official result.</p>
           </section>
         </div>
 
+        {!isCreator && !active && ch.plans.length > 0 && (
+          <div className="subbar">
+            <div><b className="num">{nearNum(ch.plans[0].price).toLocaleString(undefined, { maximumFractionDigits: 2 })} NEAR</b><small>per {planName(ch.plans[0].days)}</small></div>
+            <button className="btn" onClick={() => document.getElementById("subscribe")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Subscribe</button>
+          </div>
+        )}
         <aside className="aside">
           {isCreator && <OwnerLive signals={signals} readers={readers} account={account!} now={now} />}
           {isCreator && <EditChannel ch={ch} tags={tags} onDone={reload} />}
           {!isCreator && (
-            <section className="sheet">
+            <section className="sheet" id="subscribe">
               <h2>{active ? "Your subscription" : "Subscribe"}</h2>
               {active ? (
                 <p className="notice ok-n" style={{ margin: "10px 0 0" }}>Active until <b>{when(member!.until_ms)}</b>. Calls appear in your <a href="#/feed">feed</a>. You can extend below.</p>
               ) : (
-                <p className="sub" style={{ margin: 0 }}>Every call reaches your feed the moment it's posted.</p>
+                <p className="sub" style={{ margin: 0 }}>Calls reach your feed the moment they're posted.</p>
               )}
               <div className="plans" role="radiogroup" aria-label="Plans">
                 {ch.plans.map((pl, i) => (
@@ -247,8 +249,8 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
               )}
               <div className="splitbox">
                 <div className="split" aria-hidden><i /><i /></div>
-                <div className="split-k"><span>{near(half)} to the trader now</span><span>{near(BigInt(p.price) - half)} held</span></div>
-                <p>The held half is paid out {word} by {word}, only for {word}s the calls make money. The rest comes back to you. {subs} of {ch.max_members} seats taken · +0.05 NEAR storage, mostly refunded.</p>
+                <div className="split-k"><span>{near(half)} to the trader now</span><span>{near(BigInt(p.price) - half)} held, refunded on losing {word}s</span></div>
+                <p>{subs} of {ch.max_members} seats taken<Info tip={`The held half is paid out ${word} by ${word}, only for ${word}s the calls make money; the rest comes back to you. Subscribing also attaches about 0.05 NEAR for storage, mostly refunded.`} /></p>
               </div>
               {claim && BigInt(claim[0]) > 0n && (
                 <div className="pay">
@@ -260,7 +262,7 @@ export function ChannelPage({ id, account }: { id: number; account: string | nul
           )}
 
           <section className="sheet">
-            <div className="row-between"><h2>{Word} by {word}</h2><span className="small ink3">the held half</span></div>
+            <h2>{Word} by {word}<Info tip={`Half of every subscription is held per ${word}. A positive ${word} pays it to the trader; otherwise subscribers claim it back.`} /></h2>
             <div style={{ marginTop: 8 }}>
               {periods.map(({ p: n, r, held, signals: k }) => (
                 <PeriodRow key={n} p={n} r={r} held={held} n={k} start={ch.created_at_ms + n * periodMs} periodMs={periodMs} cur={cur} next={ch.next_period} />
@@ -357,7 +359,6 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
   return (
     <section className="sheet">
       <div className="row-between"><h2>Your live signals</h2><span className="only">ONLY YOU</span></div>
-      <p className="sub">Decrypted with your creator key, in this browser.</p>
       {live.length === 0 && <p className="sub0">Nothing live. <a href="#/desk">Post a signal</a>.</p>}
       {live.map((s) => {
         const o = open[s.id];
@@ -388,7 +389,7 @@ function OwnerLive({ signals, readers, account, now }: { signals: Signal[]; read
               ) : creatorSecret(account) ? (
                 <p className="sub0">Decrypting…</p>
               ) : (
-                <p className="sub0">This browser has no creator key. Post from here, or paste your key on the <a href="#/desk">creator desk</a>.</p>
+                <p className="sub0">No creator key in this browser. <a href="#/desk">Open the creator desk</a>.</p>
               )}
             </div>
           </div>
@@ -411,7 +412,7 @@ function EditChannel({ ch, tags, onDone }: { ch: Channel; tags: string[]; onDone
   return (
     <section className="sheet">
       <h2>Plans and settings</h2>
-      <p className="sub">Visitors see your plans here: {ch.plans.map((p) => `${near(p.price)} / ${planName(p.days)}`).join(", ")}.</p>
+      <p className="sub">{ch.plans.map((p) => `${near(p.price)} / ${planName(p.days)}`).join(" · ")}</p>
       {!open ? (
         <button className="btn ghost wide" onClick={() => { setKinds(tags); setOpen(true); }}>Edit plans, kinds and description</button>
       ) : (

@@ -3,6 +3,12 @@ import { Buffer } from "buffer";
 const g = globalThis as unknown as { Buffer?: typeof Buffer };
 g.Buffer ??= Buffer;
 
+// Theme before the first paint: the saved choice, else the system setting.
+try {
+  const t = localStorage.getItem("theme") ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = t;
+} catch { document.documentElement.dataset.theme = "light"; }
+
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import App from "./App";

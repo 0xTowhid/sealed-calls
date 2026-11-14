@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { balanceOf, call, listChannels, owedTo, pendingConfig, signIn, signOut } from "./near";
 import { useAccount, useLoad } from "./data";
 import { nearNum, slug } from "./format";
-import { Avatar } from "./ui";
+import { Avatar, Info } from "./ui";
 import { CONTRACT, CONTRACT_OVERRIDDEN, EXPLORER } from "./config";
 import { Explore } from "./pages/Explore";
 // The landing page is the site's front door (no hash); every app page lives under "#/".
@@ -52,6 +52,25 @@ function Wallet({ account, hasChannel }: { account: string | null; hasChannel: b
   );
 }
 
+function ThemeToggle() {
+  const [t, setT] = useState(() => document.documentElement.dataset.theme ?? "light");
+  const flip = () => {
+    const n = t === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = n;
+    try { localStorage.setItem("theme", n); } catch { /* private mode */ }
+    setT(n);
+  };
+  return (
+    <button className="theme" onClick={flip} aria-label={t === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={t === "dark" ? "Light theme" : "Dark theme"}>
+      {t === "dark" ? (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" /></svg>
+      )}
+    </button>
+  );
+}
+
 export default function App() {
   const route = useRoute();
   const front = window.location.hash === "" || window.location.hash === "#";
@@ -86,6 +105,7 @@ export default function App() {
           {nav("tabs")}
           <div className="bar-r">
             <a className="chip net" href={`${EXPLORER}/address/${CONTRACT}`} target="_blank" rel="noreferrer" title={`Contract ${CONTRACT}`}><span className="dot" />NEAR Testnet</a>
+            <ThemeToggle />
             <Wallet account={account} hasChannel={mine.length > 0} />
           </div>
         </div>
@@ -115,9 +135,8 @@ export default function App() {
 
         <footer className="foot">
           <p>
-            Calls can't be edited, deleted or hidden, and become public when they end. Results are indicative returns for a $500 trade, replayed on
-            public candles (Hyperliquid, GeckoTerminal) with fees and leverage. Sealed Calls doesn't stop traders trading against subscribers; it makes
-            their record public and pays them in full only when calls work.
+            Results are indicative returns for a $500 trade.
+            <Info tip="Calls can't be edited, deleted or hidden, and become public when they end. Results are replayed on public candles (Hyperliquid, GeckoTerminal) with fees and leverage. Sealed Calls doesn't stop traders trading against subscribers; it makes their record public and pays them in full only when calls work." />
           </p>
           <p>
             <a href={`${EXPLORER}/address/${CONTRACT}`} target="_blank" rel="noreferrer">{CONTRACT}</a> · NEAR testnet ·{" "}

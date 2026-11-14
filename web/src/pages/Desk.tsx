@@ -4,7 +4,7 @@ import { useLoad, useNow } from "../data";
 import { dur, near, pct, periodWord, planName, price, sig, when } from "../format";
 import { creatorSecret, exportSecret, importSecret, openWithKey, seal, signalKey, wrapFor } from "../crypto";
 import { priceOf, searchMarkets, usdShort, type Found } from "../markets";
-import { MicroTag } from "../ui";
+import { MicroTag, Info } from "../ui";
 import { Act, KindPicker, SignalFace } from "../ui";
 import { GAS_100, HL_TAKER_FEE, NEAR } from "../config";
 import type { Channel, Signal, SignalBody } from "../types";
@@ -56,7 +56,7 @@ export function Desk({ account, newChannel }: { account: string | null; newChann
           {data.all.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           <option value="new">+ New channel…</option>
         </select>
-        <span className="sub0 small">Each channel has its own prices, record and payouts. Your combined record across all of them is shown on every channel.</span>
+        <Info tip="Each channel has its own prices, record and payouts. Your combined record across all of them is shown on every channel." />
       </div>
       <Compose key={data.mine.id} ch={data.mine} account={account} subs={data.subs} held={data.held} periodMinutes={data.cfg.period_minutes} floorUsd={data.cfg.liquidity_floor_usd} />
     </>
@@ -304,7 +304,7 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
         <textarea id="msg" maxLength={280} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Why this trade, how you'd manage it." />
         {problem && (sel || lo || sl) && <div className="hint bad">{problem}</div>}
         <Act className="btn wide" label="Seal and post" busyLabel="Sealing…" disabled={!!problem} run={post} />
-        <div className="fine">Can't be edited or deleted. Attaches 0.1 NEAR for storage; the unused part comes back.</div>
+        <div className="fine">Can't be edited or deleted once posted.<Info tip="Attaches 0.1 NEAR for storage; the unused part comes back." /></div>
       </section>
 
       <div>
@@ -313,7 +313,7 @@ function Compose({ ch, account, subs, held, periodMinutes, floorUsd }: { ch: Cha
           <div className="tape" />
           <div className="hd"><span><b>{ch.name}</b> · just now</span><span>{validMin ? <>public after <b>{dur(validMin)}</b>, {when(now + validMin * 60_000)}</> : "—"}</span></div>
           <div className="bd">
-            {body ? <SignalFace b={{ ...body, entry_low: body.entry_low || "…", entry_high: body.entry_high || "…", sl: body.sl || "…", tps: body.tps.length ? body.tps : ["…"] }} validUntil={now + validMin * 60_000} /> : <p className="sub0">Choose a market in the form (type a ticker or paste a token address, then click a result) to see the preview.</p>}
+            {body ? <SignalFace b={{ ...body, entry_low: body.entry_low || "…", entry_high: body.entry_high || "…", sl: body.sl || "…", tps: body.tps.length ? body.tps : ["…"] }} validUntil={now + validMin * 60_000} /> : <p className="sub0">Pick a market to see the preview.</p>}
           </div>
         </div>
 
@@ -420,10 +420,8 @@ function LateAccess({ ch, account }: { ch: Channel; account: string }) {
   const code = exportSecret(account);
   return (
     <section className="sheet" style={{ marginTop: 26 }}>
-      <h2>Late subscribers</h2>
-      <p className="sub">
-        Someone who subscribes while a signal is live gets it while this page is open: it shares your live signals with new subscribers every 30 seconds. The keys it stores are paid from your storage credit (about 0.002 NEAR per subscriber per signal; withdraw the rest any time).
-      </p>
+      <h2>Late subscribers<Info tip="While this page is open it shares your live signals with people who subscribe after you posted, every 30 seconds. The keys it stores are paid from your storage credit (about 0.002 NEAR per subscriber per signal; withdraw the rest any time)." /></h2>
+      <p className="sub">New subscribers get your live calls while this page is open.</p>
       {st && (
         <dl className="kv">
           <dt>Live signals</dt><dd>{st.live}</dd>
