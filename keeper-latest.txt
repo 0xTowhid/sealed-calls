@@ -1,26 +1,18 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Sun Nov 15 14:41:05 UTC 2026
-[14:41:08] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[14:41:12] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.767555434187015907407434 NEAR 
-[14:41:16] period 7 has not ended yet (current 7)
-[14:41:20] settle channel 1 period 6 (held 0)
-    │    Transaction ID: 3rZK71n6EGaovHBaGej9bWdrBRMNDBmJaEbviQ6ka4Bh
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":6,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Sun Nov 15 20:17:47 UTC 2026
+[20:17:51] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[20:17:55] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.758835547074309407407434 NEAR 
+[20:18:00] settle channel 0 period 7 (held 3596442294973544973544)
+    │    Transaction ID: 7u5bxWeJNY3UHEQHbBNNMnNvZ9HxzihxAJFDMPhXxcL7
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":7,"signals":0,"score_bps":0,"released":false,"held":"3596442294973544973544"}]}
     Function execution return value (printed to stdout):
-[14:41:25]    period 6: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794753681978}
-[14:41:26] period 7 has not ended yet (current 7)
-[14:41:31] settle channel 2 period 6 (held 714285714285714285714)
-    │    Transaction ID: 2jUAHzycZEZ4T42A6uXczn26EBYiBFukBkSBwr6bfFd2
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":6,"signals":0,"score_bps":0,"released":false,"held":"714285714285714285714"}]}
+[20:18:05]    period 7: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"3596442294973544973544","settled_at_ms":1794773882060}
+[20:18:06] period 8 has not ended yet (current 8)
+[20:18:08] period 7 has not ended yet (current 7)
+[20:18:12] period 7 has not ended yet (current 7)
+[20:18:17] settle channel 3 period 4 (held 14285714285714285714284)
+    │    Transaction ID: 92kiq5qU43HzVgzyAFZHBndnFcYao95HNdh2vxSySw1g
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":4,"signals":1,"score_bps":-1035,"released":false,"held":"14285714285714285714284"}]}
     Function execution return value (printed to stdout):
-[14:41:36]    period 6: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"714285714285714285714","settled_at_ms":1794753692882}
-[14:41:37] period 7 has not ended yet (current 7)
-[14:41:39] channel 3 signal 8: revealing from drand
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signal_revealed","data":[{"signal":8,"channel":3,"creator":"to69.testnet","valid":true,"by":"to69.testnet"}]}
-[14:41:45] channel 3: scoring signals [8] on OutLayer
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"scoring_requested","data":[{"signals":[8]}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_requested","data":[{"request_data":"{\"request_id\":54282,\"sender_id\":\"to69.testnet\",\"predecessor_id\":\"app.to69.testnet\",\"code_source\":{\"WasmUrl\":{\"url\":\"https://raw.githubusercontent.com/0xTowhid/sealed-calls/ca5bba626483de35fd03eaaaa1efcd6c0632512e/scorer.wasm\",\"hash\":\"4cfac07f45e059fd94466092f7cc05c2368984427821f33e230f851eaca0977d\",\"build_target\":\"wasm32-wasip2\"}},\"resource_limits\":{\"max_instructions\":10000000000,\"max_memory_mb\":256,\"max_execution_seconds\":180},\"input_data\":\"{\\\"signals\\\":[{\\\"id\\\":8,\\\"venue\\\":\\\"hyperliquid\\\",\\\"network\\\":null,\\\"address\\\":\\\"BTC\\\",\\\"side\\\":\\\"long\\\",\\\"leverage\\\":25,\\\"entry_low\\\":\\\"66000\\\",\\\"entry_high\\\":\\\"66500\\\",\\\"tps\\\":[\\\"69000\\\"],\\\"sl\\\":\\\"65000\\\",\\\"posted_at_ms\\\":1794642395862,\\\"valid_min\\\":1440}],\\\"reference_usd\\\":500,\\\"liquidity_floor_usd\\\":100000}\",\"input_data_in_state\":false,\"secrets_ref\":null,\"response_format\":\"Json\",\"payment\":\"298000000000000000000000\",\"attached_usd\":\"0\",\"timestamp\":1794753708092082244,\"compile_only\":false,\"force_rebuild\":false,\"store_on_fastfs\":false,\"use_bound_identity\":false,\"project_uuid\":null,\"project_id\":null}","data_id":[194,24,224,244,162,110,41,31,111,74,1,44,38,238,107,177,72,131,236,4,118,235,11,246,105,142,245,128,173,86,75,110],"timestamp":1794753708092082244}]}
-    │      EVENT_JSON:{"standard":"near-outlayer","version":"1.0.0","event":"execution_completed","data":[{"sender_id":"to69.testnet","resources_used":{"instructions":45044308,"time_ms":2217,"compile_time_ms":null},"success":true,"error_message":null,"payment_charged":"1221704500000000000000","payment_refunded":"296778295500000000000000","compilation_note":"Cached WASM from 2026-11-13T15:47:58.434590+00:00","timestamp":1794753805232920297}]}
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"signals_scored","data":[{"signals":[{"id":8,"r_bps":-6213,"outcome":"sl"}]}]}
-    signal 8 BTC -62.13% sl
-[14:43:44] period 4 has not ended yet (current 4)
-[14:43:44] keeper done
+[20:18:22]    period 4: {"status":"Settled","signals":1,"sum_bps":-6213,"score_bps":-1035,"released":false,"held":"14285714285714285714284","settled_at_ms":1794773898802}
+[20:18:23] period 5 has not ended yet (current 5)
+[20:18:23] keeper done
