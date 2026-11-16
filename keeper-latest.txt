@@ -1,18 +1,8 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Sun Nov 15 20:17:47 UTC 2026
-[20:17:51] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[20:17:55] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.758835547074309407407434 NEAR 
-[20:18:00] settle channel 0 period 7 (held 3596442294973544973544)
-    │    Transaction ID: 7u5bxWeJNY3UHEQHbBNNMnNvZ9HxzihxAJFDMPhXxcL7
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":7,"signals":0,"score_bps":0,"released":false,"held":"3596442294973544973544"}]}
-    Function execution return value (printed to stdout):
-[20:18:05]    period 7: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"3596442294973544973544","settled_at_ms":1794773882060}
-[20:18:06] period 8 has not ended yet (current 8)
-[20:18:08] period 7 has not ended yet (current 7)
-[20:18:12] period 7 has not ended yet (current 7)
-[20:18:17] settle channel 3 period 4 (held 14285714285714285714284)
-    │    Transaction ID: 92kiq5qU43HzVgzyAFZHBndnFcYao95HNdh2vxSySw1g
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":4,"signals":1,"score_bps":-1035,"released":false,"held":"14285714285714285714284"}]}
-    Function execution return value (printed to stdout):
-[20:18:22]    period 4: {"status":"Settled","signals":1,"sum_bps":-6213,"score_bps":-1035,"released":false,"held":"14285714285714285714284","settled_at_ms":1794773898802}
-[20:18:23] period 5 has not ended yet (current 5)
-[20:18:23] keeper done
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Mon Nov 16 00:17:26 UTC 2026
+[00:17:30] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[00:17:33] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.756206312166201107407434 NEAR 
+[00:17:38] period 8 has not ended yet (current 8)
+[00:17:40] period 7 has not ended yet (current 7)
+[00:17:45] period 7 has not ended yet (current 7)
+[00:17:49] period 5 has not ended yet (current 5)
+[00:17:49] keeper done
