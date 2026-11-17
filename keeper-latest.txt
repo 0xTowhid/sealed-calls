@@ -1,18 +1,13 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Tue Nov 17 09:00:29 UTC 2026
-[09:00:32] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[09:00:35] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.750986714709819907407434 NEAR 
-[09:00:38] period 9 has not ended yet (current 9)
-[09:00:41] settle channel 1 period 8 (held 0)
-    │    Transaction ID: HtLzjvrxbPhbHDa5MwnQHCcz76rR1VbgPPNuoq2RcEEC
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":8,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Tue Nov 17 18:25:04 UTC 2026
+[18:25:08] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[18:25:11] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.748379689572975307407434 NEAR 
+[18:25:15] period 9 has not ended yet (current 9)
+[18:25:18] period 9 has not ended yet (current 9)
+[18:25:21] period 9 has not ended yet (current 9)
+[18:25:27] settle channel 3 period 6 (held 14285714285714285714284)
+    │    Transaction ID: DHja14mS9U8EGjnsEawrGyL95TKcYkW1yDFL1HZZNqbe
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":6,"signals":0,"score_bps":0,"released":false,"held":"14285714285714285714284"}]}
     Function execution return value (printed to stdout):
-[09:00:46]    period 8: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794906042789}
-[09:00:47] period 9 has not ended yet (current 9)
-[09:00:51] settle channel 2 period 8 (held 0)
-    │    Transaction ID: DJCLBx8M86JjxFQsz98RihiSNmSqU2ov9cLdMedfTcAy
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":8,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
-    Function execution return value (printed to stdout):
-[09:00:56]    period 8: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794906052447}
-[09:00:56] period 9 has not ended yet (current 9)
-[09:00:59] period 6 has not ended yet (current 6)
-[09:00:59] keeper done
+[18:25:32]    period 6: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"14285714285714285714284","settled_at_ms":1794939928883}
+[18:25:33] period 7 has not ended yet (current 7)
+[18:25:33] keeper done
