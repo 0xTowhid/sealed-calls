@@ -1,18 +1,8 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Wed Nov 18 09:01:53 UTC 2026
-[09:01:57] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[09:02:00] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.745770119442956107407434 NEAR 
-[09:02:04] period 10 has not ended yet (current 10)
-[09:02:07] settle channel 1 period 9 (held 0)
-    │    Transaction ID: Gt7SvSfb1Cg8XgBwhehGeAK2cPrinfwYpzR1UkhCt52p
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":9,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
-    Function execution return value (printed to stdout):
-[09:02:13]    period 9: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794992529151}
-[09:02:13] period 10 has not ended yet (current 10)
-[09:02:18] settle channel 2 period 9 (held 0)
-    │    Transaction ID: Ezyher8qZ5PTCKq3hbNdExkDfnAY44bD1Hjr32iSon5g
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":9,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
-    Function execution return value (printed to stdout):
-[09:02:23]    period 9: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1794992539891}
-[09:02:23] period 10 has not ended yet (current 10)
-[09:02:27] period 7 has not ended yet (current 7)
-[09:02:27] keeper done
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Wed Nov 18 17:56:38 UTC 2026
+[17:56:42] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[17:56:45] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.743163094306111507407434 NEAR 
+[17:56:48] period 10 has not ended yet (current 10)
+[17:56:51] period 10 has not ended yet (current 10)
+[17:56:54] period 10 has not ended yet (current 10)
+[17:56:58] period 7 has not ended yet (current 7)
+[17:56:58] keeper done
