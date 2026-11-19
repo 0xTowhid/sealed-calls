@@ -1,8 +1,18 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Thu Nov 19 17:16:07 UTC 2026
-[17:16:10] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[17:16:14] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.737944434108734607407434 NEAR 
-[17:16:17] period 11 has not ended yet (current 11)
-[17:16:20] period 11 has not ended yet (current 11)
-[17:16:23] period 11 has not ended yet (current 11)
-[17:16:27] period 8 has not ended yet (current 8)
-[17:16:27] keeper done
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Thu Nov 19 23:45:00 UTC 2026
+[23:45:03] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[23:45:05] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.737944434108734607407434 NEAR 
+[23:45:09] settle channel 0 period 11 (held 0)
+    │    Transaction ID: 3YNn2C3pFjTVDr8HLdXPmCQ9QLyhXsGXD65BvKvXjmCX
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":11,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+    Function execution return value (printed to stdout):
+[23:45:14]    period 11: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1795131911289}
+[23:45:15] period 12 has not ended yet (current 12)
+[23:45:17] period 11 has not ended yet (current 11)
+[23:45:20] period 11 has not ended yet (current 11)
+[23:45:25] settle channel 3 period 8 (held 7142857142857142857142)
+    │    Transaction ID: DXyBmEHo4iU6wdKL87vCBhN3hTvxzjgd8TbxgJ4J4nPh
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":8,"signals":0,"score_bps":0,"released":false,"held":"7142857142857142857142"}]}
+    Function execution return value (printed to stdout):
+[23:45:30]    period 8: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"7142857142857142857142","settled_at_ms":1795131926514}
+[23:45:30] period 9 has not ended yet (current 9)
+[23:45:30] keeper done
