@@ -1,18 +1,18 @@
-=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Tue Nov 24 17:28:09 UTC 2026
-[17:28:12] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
-[17:28:18] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.714468401104127207407434 NEAR 
-[17:28:23] period 16 has not ended yet (current 16)
-[17:28:26] settle channel 1 period 15 (held 0)
-    │    Transaction ID: GN8j8rwEY3pPwy3R8M8UT1z7T6iLE5y9pLEw2iD67zeg
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":1,"period":15,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+=== keep  commit 69f1c307a39e7c2e3ba2cbc20ca767c14414fcb6  Wed Nov 25 01:32:08 UTC 2026
+[01:32:12] key check OK: ed25519:27UZSb35hjW4WNTnuksquFzLMrm2AfCJuvayQgFKPc8u is a full-access key of to69.testnet
+[01:32:20] keeper: 4 channel(s) on app.to69.testnet; to69.testnet: Native account balance           8.711861305036294807407434 NEAR 
+[01:32:27] settle channel 0 period 16 (held 0)
+    │    Transaction ID: APssMmthKPyLTH9HAQiw41qvsKFezNbcy7JzjBwwQfH2
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":0,"period":16,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
     Function execution return value (printed to stdout):
-[17:28:35]    period 15: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1795541311425}
-[17:28:36] period 16 has not ended yet (current 16)
-[17:28:42] settle channel 2 period 15 (held 0)
-    │    Transaction ID: HzDVo7XLz5h5PZXgy4TdWc2Cn2NjM3pdYcPSU3jfAeTY
-    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":2,"period":15,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
+[01:32:35]    period 16: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1795570352283}
+[01:32:36] period 17 has not ended yet (current 17)
+[01:32:39] period 16 has not ended yet (current 16)
+[01:32:42] period 16 has not ended yet (current 16)
+[01:32:48] settle channel 3 period 13 (held 0)
+    │    Transaction ID: 3ZJtWvkPrzddJ4T9ySeJvpjKenTBksj5G6X8fY5HdRy9
+    │      EVENT_JSON:{"standard":"sealedcalls","version":"2.0.0","event":"period_settled","data":[{"channel":3,"period":13,"signals":0,"score_bps":0,"released":false,"held":"0"}]}
     Function execution return value (printed to stdout):
-[17:28:50]    period 15: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1795541326608}
-[17:28:51] period 16 has not ended yet (current 16)
-[17:28:55] period 13 has not ended yet (current 13)
-[17:28:55] keeper done
+[01:32:56]    period 13: {"status":"Settled","signals":0,"sum_bps":0,"score_bps":0,"released":false,"held":"0","settled_at_ms":1795570373113}
+[01:32:57] period 14 has not ended yet (current 14)
+[01:32:57] keeper done
